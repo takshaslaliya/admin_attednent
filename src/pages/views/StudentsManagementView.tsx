@@ -742,7 +742,7 @@ export const StudentsManagementView: React.FC = () => {
     setAssignAllError('');
     setAssignAllSuccess('');
     try {
-      const res = await apiClient.post('/api/tags/assign-all', { tag_id: selectedAssignTagId });
+      const res = await apiClient.post('/tags/assign-all', { tag_id: selectedAssignTagId });
       if (res.data.success) {
         setAssignAllSuccess(res.data.message || `Tag "${chosenTag?.name || ''}" successfully assigned to all students!`);
         fetchData(false);
