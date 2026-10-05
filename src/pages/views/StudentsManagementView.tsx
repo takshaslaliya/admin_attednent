@@ -93,6 +93,13 @@ export const StudentsManagementView: React.FC = () => {
   const [newTagDesc, setNewTagDesc] = useState('');
   const [creatingTag, setCreatingTag] = useState(false);
 
+  // Bulk Assign Tag States
+  const [assignAllTagModalOpen, setAssignAllTagModalOpen] = useState(false);
+  const [selectedAssignTagId, setSelectedAssignTagId] = useState<number | null>(null);
+  const [assigningAllTags, setAssigningAllTags] = useState(false);
+  const [assignAllError, setAssignAllError] = useState('');
+  const [assignAllSuccess, setAssignAllSuccess] = useState('');
+
   const tagColorPalette = [
     '#4f46e5', // Indigo
     '#10b981', // Emerald
@@ -725,6 +732,35 @@ export const StudentsManagementView: React.FC = () => {
     };
   };
 
+  const handleAssignTagToAll = async () => {
+    if (!selectedAssignTagId) {
+      setAssignAllError('Please select a tag to assign');
+      return;
+    }
+    const chosenTag = allTags.find(t => t.id === selectedAssignTagId);
+    setAssigningAllTags(true);
+    setAssignAllError('');
+    setAssignAllSuccess('');
+    try {
+      const res = await apiClient.post('/api/tags/assign-all', { tag_id: selectedAssignTagId });
+      if (res.data.success) {
+        setAssignAllSuccess(res.data.message || `Tag "${chosenTag?.name || ''}" successfully assigned to all students!`);
+        fetchData(false);
+        setTimeout(() => {
+          setAssignAllTagModalOpen(false);
+          setAssignAllSuccess('');
+          setSelectedAssignTagId(null);
+        }, 1800);
+      } else {
+        setAssignAllError(res.data.message || 'Failed to assign tag');
+      }
+    } catch (err: any) {
+      setAssignAllError(err.response?.data?.message || err.message || 'Server error');
+    } finally {
+      setAssigningAllTags(false);
+    }
+  };
+
   return (
     <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header Actions */}
@@ -763,24 +799,52 @@ export const StudentsManagementView: React.FC = () => {
           )}
 
           {userRole !== 'LEADER' && (
-            <button
-              onClick={() => setManageTagsModal(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 16px',
-                backgroundColor: '#ffffff',
-                color: '#4f46e5',
-                border: '1px solid #c7d2fe',
-                borderRadius: '10px',
-                fontSize: '14px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <Tag size={16} /> Manage Tags
-            </button>
+            <>
+              <button
+                onClick={() => setManageTagsModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#ffffff',
+                  color: '#4f46e5',
+                  border: '1px solid #c7d2fe',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <Tag size={16} /> Manage Tags
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedAssignTagId(null);
+                  setAssignAllError('');
+                  setAssignAllSuccess('');
+                  setAssignAllTagModalOpen(true);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#ffffff',
+                  color: '#0284c7',
+                  border: '1px solid #bae6fd',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(2, 132, 199, 0.08)',
+                }}
+                title="Assign a chosen tag to all students in the database"
+              >
+                <CheckCircle2 size={16} color="#0284c7" /> Assign Tag to All
+              </button>
+            </>
           )}
 
           {admin?.role !== 'LEADER' && (
@@ -2356,6 +2420,265 @@ export const StudentsManagementView: React.FC = () => {
         </div>
       )}
 
+      {/* Modal for Assign Tag to All */}
+      {assignAllTagModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '20px',
+            width: '100%',
+            maxWidth: '520px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #e2e8f0',
+            overflow: 'hidden',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#f8fafc'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '12px',
+                  backgroundColor: '#e0f2fe',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Tag size={20} color="#0284c7" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                    Assign Tag to All Students
+                  </h3>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#64748b' }}>
+                    Apply a single tag across all {students.length} students
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAssignAllTagModalOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '60vh', overflowY: 'auto' }}>
+              <p style={{ margin: 0, fontSize: '13px', color: '#475569', lineHeight: 1.5 }}>
+                Select a tag from the list below. This tag will be assigned to <strong>every student</strong> in the system. Existing assignments will remain untouched.
+              </p>
+
+              {assignAllError && (
+                <div style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '10px',
+                  color: '#991b1b',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <AlertCircle size={16} color="#ef4444" />
+                  {assignAllError}
+                </div>
+              )}
+
+              {assignAllSuccess && (
+                <div style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  borderRadius: '10px',
+                  color: '#065f46',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <CheckCircle2 size={16} color="#10b981" />
+                  {assignAllSuccess}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                  Choose Tag to Assign <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+
+                {allTags.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: '#94a3b8', fontStyle: 'italic' }}>No tags available</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {allTags.map((tag: any) => {
+                      const isSelected = selectedAssignTagId === tag.id;
+                      return (
+                        <div
+                          key={tag.id}
+                          onClick={() => {
+                            setSelectedAssignTagId(tag.id);
+                            setAssignAllError('');
+                          }}
+                          style={{
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            border: isSelected ? `2px solid ${tag.color || '#4f46e5'}` : '1.5px solid #e2e8f0',
+                            backgroundColor: isSelected ? `${tag.color || '#4f46e5'}10` : '#ffffff',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span
+                              style={{
+                                width: '14px',
+                                height: '14px',
+                                borderRadius: '50%',
+                                backgroundColor: tag.color || '#6366f1',
+                                display: 'inline-block',
+                                flexShrink: 0
+                              }}
+                            />
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                                  {tag.name}
+                                </span>
+                                {Boolean(tag.is_system) && (
+                                  <span style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#f1f5f9',
+                                    color: '#64748b'
+                                  }}>
+                                    System
+                                  </span>
+                                )}
+                              </div>
+                              {tag.description && (
+                                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                                  {tag.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            border: isSelected ? `2px solid ${tag.color || '#4f46e5'}` : '2px solid #cbd5e1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: isSelected ? tag.color || '#4f46e5' : 'transparent'
+                          }}>
+                            {isSelected && <Check size={12} color="#ffffff" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{
+              padding: '16px 24px',
+              backgroundColor: '#f8fafc',
+              borderTop: '1px solid #f1f5f9',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '12px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setAssignAllTagModalOpen(false)}
+                disabled={assigningAllTags}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#475569',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAssignTagToAll}
+                disabled={assigningAllTags || !selectedAssignTagId}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                  color: '#ffffff',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: (assigningAllTags || !selectedAssignTagId) ? 'not-allowed' : 'pointer',
+                  opacity: (assigningAllTags || !selectedAssignTagId) ? 0.6 : 1,
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <CheckCircle2 size={16} />
+                {assigningAllTags ? 'Assigning to All...' : 'Confirm & Assign to All'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
+
