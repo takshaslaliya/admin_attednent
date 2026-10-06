@@ -35,10 +35,10 @@ export const DashboardOverview: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  // 3-Day Absentees Filters & Justification Modal
-  const [absentSearch, setAbsentSearch] = useState('');
-  const [absentFloor, setAbsentFloor] = useState('All');
-  const [absentJustifyFilter, setAbsentJustifyFilter] = useState<'all' | 'unjustified' | 'justified'>('all');
+  // Leave Attendance Discrepancies Filters & Justification Modal
+  const [leaveSearch, setLeaveSearch] = useState('');
+  const [leaveFloor, setLeaveFloor] = useState('All');
+  const [leaveJustifyFilter, setLeaveJustifyFilter] = useState<'all' | 'unjustified' | 'justified'>('all');
   const [justifyModal, setJustifyModal] = useState<{ isOpen: boolean; student: any; reason: string; error?: string } | null>(null);
   const [submittingJustify, setSubmittingJustify] = useState(false);
 
@@ -83,29 +83,30 @@ export const DashboardOverview: React.FC = () => {
     fetchStats(selectedSessionKey, true, selectedDate);
   };
 
-  // Submit Justification from Dashboard
+  // Submit Justification for Student Marked Attendance While on Leave
   const handleSaveJustification = async () => {
     if (!justifyModal) return;
     const trimmed = justifyModal.reason.trim();
     if (!trimmed) {
       setJustifyModal({
         ...justifyModal,
-        error: 'Description / justification reason is required!'
+        error: 'Please enter verification / meeting notes!'
       });
       return;
     }
 
     setSubmittingJustify(true);
     try {
-      const datesToJustify = justifyModal.student.missed_dates && justifyModal.student.missed_dates.length > 0
-        ? justifyModal.student.missed_dates
+      const datesToJustify = justifyModal.student.marked_dates && justifyModal.student.marked_dates.length > 0
+        ? justifyModal.student.marked_dates
         : [selectedDate];
 
-      const res = await apiClient.post('/attendance/session/absent-reason', {
-        session_key: selectedSessionKey !== 'recent' && selectedSessionKey !== 'all' ? selectedSessionKey : 'night',
+      const res = await apiClient.post('/admin/leave-attendance/justify', {
         student_id: justifyModal.student.student_id,
         student_code: justifyModal.student.student_code,
-        dates: datesToJustify,
+        leave_id: justifyModal.student.leave_id,
+        session_dates: datesToJustify,
+        session_type: selectedSessionKey !== 'recent' && selectedSessionKey !== 'all' ? selectedSessionKey : 'night',
         reason: trimmed,
         is_justified: true
       });
@@ -114,10 +115,10 @@ export const DashboardOverview: React.FC = () => {
         setJustifyModal(null);
         fetchStats(selectedSessionKey, false, selectedDate);
       } else {
-        alert(res.data.message || 'Failed to save reason');
+        alert(res.data.message || 'Failed to save justification');
       }
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to save reason');
+      alert(e.response?.data?.message || 'Failed to save justification');
     } finally {
       setSubmittingJustify(false);
     }
@@ -180,18 +181,19 @@ export const DashboardOverview: React.FC = () => {
     };
   });
 
-  // Filter 3-Day Absentees list
-  const absenteesList: any[] = stats?.consecutive_absentees || [];
-  const filteredAbsentees = absenteesList.filter(s => {
-    const matchesFloor = absentFloor === 'All' || String(s.floor_id) === String(absentFloor);
-    const matchesJustify = absentJustifyFilter === 'all' || 
-      (absentJustifyFilter === 'justified' && s.is_justified) ||
-      (absentJustifyFilter === 'unjustified' && !s.is_justified);
-    const matchesSearch = !absentSearch ||
-      String(s.student_code || '').toLowerCase().includes(absentSearch.toLowerCase()) ||
-      String(s.name || '').toLowerCase().includes(absentSearch.toLowerCase()) ||
-      String(s.room_number || '').toLowerCase().includes(absentSearch.toLowerCase()) ||
-      String(s.phone_number || '').toLowerCase().includes(absentSearch.toLowerCase());
+  // Filter Students Marked Attendance While on Leave
+  const leaveDiscrepanciesList: any[] = stats?.leave_attendance_discrepancies || stats?.consecutive_absentees || [];
+  const filteredDiscrepancies = leaveDiscrepanciesList.filter(s => {
+    const matchesFloor = leaveFloor === 'All' || String(s.floor_id) === String(leaveFloor);
+    const matchesJustify = leaveJustifyFilter === 'all' || 
+      (leaveJustifyFilter === 'justified' && s.is_justified) ||
+      (leaveJustifyFilter === 'unjustified' && !s.is_justified);
+    const matchesSearch = !leaveSearch ||
+      String(s.student_code || '').toLowerCase().includes(leaveSearch.toLowerCase()) ||
+      String(s.name || '').toLowerCase().includes(leaveSearch.toLowerCase()) ||
+      String(s.room_number || '').toLowerCase().includes(leaveSearch.toLowerCase()) ||
+      String(s.phone_number || '').toLowerCase().includes(leaveSearch.toLowerCase()) ||
+      String(s.leave_reason || '').toLowerCase().includes(leaveSearch.toLowerCase());
     return matchesFloor && matchesJustify && matchesSearch;
   });
 
@@ -719,49 +721,60 @@ export const DashboardOverview: React.FC = () => {
         </HamsCard>
       </div>
 
-      {/* 3+ CONSECUTIVE DAYS UNJUSTIFIED ABSENTEES TABLE */}
+      {/* STUDENTS MARKED ATTENDANCE WHILE ON LEAVE TABLE */}
       <HamsCard padding="24px">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                backgroundColor: '#fef2f2',
-                color: '#dc2626',
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                backgroundColor: '#fff7ed',
+                color: '#ea580c',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                border: '1px solid #fed7aa'
               }}>
-                <AlertTriangle size={18} />
+                <AlertTriangle size={20} />
               </div>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                  3+ Consecutive Days Absentees
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  Students Marked Attendance While on Leave
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    backgroundColor: filteredDiscrepancies.length > 0 ? '#ffedd5' : '#f1f5f9',
+                    color: filteredDiscrepancies.length > 0 ? '#c2410c' : '#64748b'
+                  }}>
+                    {filteredDiscrepancies.length} Record{filteredDiscrepancies.length === 1 ? '' : 's'}
+                  </span>
                 </h3>
                 <p style={{ fontSize: '13px', color: '#64748b', margin: '2px 0 0 0' }}>
-                  Students absent for the last {stats?.target_dates?.length || 3} occurrences of <strong>{currentSessionName}</strong> — track both justified and unjustified absences.
+                  Students who marked attendance while having an active approved leave. Verify physical presence in hostel and record meeting status.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Filters for Absentees Table */}
+          {/* Filters for Discrepancy Table */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
             <select 
-              value={absentJustifyFilter} 
-              onChange={e => setAbsentJustifyFilter(e.target.value as any)} 
-              style={{ minWidth: '195px', height: '40px', fontSize: '13px', fontWeight: 600, padding: '0 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
+              value={leaveJustifyFilter} 
+              onChange={e => setLeaveJustifyFilter(e.target.value as any)} 
+              style={{ minWidth: '190px', height: '40px', fontSize: '13px', fontWeight: 600, padding: '0 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
             >
-              <option value="all">All 3-Day Absentees</option>
-              <option value="unjustified">Unjustified Only</option>
-              <option value="justified">Justified Only</option>
+              <option value="all">All Discrepancies</option>
+              <option value="unjustified">Action Required (Unmet)</option>
+              <option value="justified">Met & Justified Only</option>
             </select>
 
             <select 
-              value={absentFloor} 
-              onChange={e => setAbsentFloor(e.target.value)} 
+              value={leaveFloor} 
+              onChange={e => setLeaveFloor(e.target.value)} 
               style={{ minWidth: '140px', height: '40px', fontSize: '13px', fontWeight: 600, padding: '0 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
             >
               <option value="All">All Floors</option>
@@ -774,9 +787,9 @@ export const DashboardOverview: React.FC = () => {
               <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input
                 type="text"
-                placeholder="Search by ID, Name, Room..."
-                value={absentSearch}
-                onChange={e => setAbsentSearch(e.target.value)}
+                placeholder="Search by ID, Name, Room, Reason..."
+                value={leaveSearch}
+                onChange={e => setLeaveSearch(e.target.value)}
                 style={{ width: '100%', height: '40px', paddingLeft: '36px', paddingRight: '12px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff' }}
               />
             </div>
@@ -784,11 +797,11 @@ export const DashboardOverview: React.FC = () => {
             <span style={{
               padding: '8px 16px',
               borderRadius: '20px',
-              backgroundColor: filteredAbsentees.length > 0 
-                ? (absentJustifyFilter === 'justified' ? '#ecfdf5' : '#fef2f2') 
+              backgroundColor: filteredDiscrepancies.length > 0 
+                ? (leaveJustifyFilter === 'justified' ? '#ecfdf5' : '#fff7ed') 
                 : '#f8fafc',
-              color: filteredAbsentees.length > 0 
-                ? (absentJustifyFilter === 'justified' ? '#047857' : '#b91c1c') 
+              color: filteredDiscrepancies.length > 0 
+                ? (leaveJustifyFilter === 'justified' ? '#047857' : '#c2410c') 
                 : '#64748b',
               fontSize: '13px',
               fontWeight: 800,
@@ -797,8 +810,8 @@ export const DashboardOverview: React.FC = () => {
               gap: '6px',
               boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
             }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: filteredAbsentees.length > 0 ? (absentJustifyFilter === 'justified' ? '#10b981' : '#ef4444') : '#94a3b8' }}></span>
-              {filteredAbsentees.length} {absentJustifyFilter === 'justified' ? 'Justified' : absentJustifyFilter === 'unjustified' ? 'Defaulters' : 'Absentees'}
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: filteredDiscrepancies.length > 0 ? (leaveJustifyFilter === 'justified' ? '#10b981' : '#ea580c') : '#94a3b8' }}></span>
+              {filteredDiscrepancies.length} {leaveJustifyFilter === 'justified' ? 'Justified' : leaveJustifyFilter === 'unjustified' ? 'Pending Action' : 'Total'}
             </span>
           </div>
         </div>
@@ -814,14 +827,15 @@ export const DashboardOverview: React.FC = () => {
                 <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Floor</th>
                 <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Room No.</th>
                 <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Contact</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Missed Dates</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Justification Status</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Approved Leave Period & Reason</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Marked on Leave (Times & Dates)</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Meeting Status</th>
                 <th style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredAbsentees.map((s: any) => (
-                <tr key={s.student_code} style={{ borderBottom: '1px solid #f1f5f9' }}>
+              {filteredDiscrepancies.map((s: any) => (
+                <tr key={`${s.student_code}_${s.leave_id}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '12px 14px', fontWeight: 800, color: '#2563eb', whiteSpace: 'nowrap' }}>
                     {s.student_code}
                   </td>
@@ -916,24 +930,60 @@ export const DashboardOverview: React.FC = () => {
                     )}
                   </td>
                   <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '6px', alignItems: 'center' }}>
-                      {(s.missed_dates || []).map((d: string) => (
-                        <span 
-                          key={d} 
-                          style={{
-                            padding: '3px 8px',
-                            backgroundColor: '#fee2e2',
-                            color: '#991b1b',
-                            border: '1px solid #fecaca',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          {formatDateShort(d)}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <span style={{
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: '#1e40af',
+                        backgroundColor: '#eff6ff',
+                        border: '1px solid #dbeafe',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        width: 'fit-content',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        🌴 {formatDateShort(s.leave_start)} – {formatDateShort(s.leave_end)}
+                      </span>
+                      {s.leave_reason && (
+                        <span style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          "{s.leave_reason}"
                         </span>
-                      ))}
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        color: '#ea580c',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        ⚠️ Marked {s.marked_count} {s.marked_count === 1 ? 'time' : 'times'} on leave:
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '5px', alignItems: 'center' }}>
+                        {(s.marked_dates || []).map((d: string) => (
+                          <span 
+                            key={d} 
+                            style={{
+                              padding: '2px 7px',
+                              backgroundColor: '#fff7ed',
+                              color: '#c2410c',
+                              border: '1px solid #fed7aa',
+                              borderRadius: '5px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {formatDateShort(d)}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </td>
                   <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
@@ -953,7 +1003,7 @@ export const DashboardOverview: React.FC = () => {
                           width: 'fit-content',
                           whiteSpace: 'nowrap'
                         }}>
-                          <CheckCircle2 size={13} /> Justified
+                          <CheckCircle2 size={13} /> Met & Justified
                         </span>
                         {s.justification_reason && (
                           <ExpandableReasonTooltip
@@ -969,15 +1019,15 @@ export const DashboardOverview: React.FC = () => {
                         borderRadius: '12px',
                         fontSize: '12px',
                         fontWeight: 700,
-                        backgroundColor: '#fef2f2',
-                        color: '#b91c1c',
-                        border: '1px solid #fecaca',
+                        backgroundColor: '#fff7ed',
+                        color: '#c2410c',
+                        border: '1px solid #fed7aa',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '4px',
                         whiteSpace: 'nowrap'
                       }}>
-                        <AlertTriangle size={13} /> Unjustified Absent
+                        <AlertTriangle size={13} /> Action Required
                       </span>
                     )}
                   </td>
@@ -985,7 +1035,7 @@ export const DashboardOverview: React.FC = () => {
                     <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
                       {s.phone_number && (
                         <a
-                          href={`https://wa.me/91${s.phone_number}?text=Hello%20${encodeURIComponent(s.name)},%20you%20have%20been%20absent%20from%20hostel%20attendance%20for%20the%20last%203%20days%20without%20justification.%20Please%20report%20to%20your%20floor%20leader.`}
+                          href={`https://wa.me/91${s.phone_number}?text=Hello%20${encodeURIComponent(s.name)},%20our%20hostel%20records%20show%20you%20marked%20attendance%20while%20on%20approved%20leave.%20Please%20meet%20your%20floor%20leader%20or%20admin%20to%20verify%20your%20presence.`}
                           target="_blank"
                           rel="noreferrer"
                           style={{
@@ -1008,33 +1058,39 @@ export const DashboardOverview: React.FC = () => {
                       )}
 
                       <button
-                        onClick={() => setJustifyModal({ isOpen: true, student: s, reason: '', error: undefined })}
+                        onClick={() => setJustifyModal({ 
+                          isOpen: true, 
+                          student: s, 
+                          reason: s.justification_reason || 'Met student in room - verified physical presence and early return from leave.', 
+                          error: undefined 
+                        })}
                         style={{
-                          padding: '6px 12px',
-                          backgroundColor: '#ffffff',
-                          color: '#3b82f6',
-                          border: '1.5px solid #cbd5e1',
+                          padding: '6px 14px',
+                          backgroundColor: s.is_justified ? '#f8fafc' : '#3b82f6',
+                          color: s.is_justified ? '#475569' : '#ffffff',
+                          border: s.is_justified ? '1.5px solid #cbd5e1' : 'none',
                           borderRadius: '8px',
                           fontWeight: 700,
                           fontSize: '12px',
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px',
-                          whiteSpace: 'nowrap'
+                          gap: '5px',
+                          whiteSpace: 'nowrap',
+                          boxShadow: s.is_justified ? 'none' : '0 2px 6px rgba(59,130,246,0.3)'
                         }}
                       >
-                        <FileText size={13} /> Justify
+                        <CheckCircle2 size={13} /> {s.is_justified ? 'Edit Justification' : 'Justify / Met Student'}
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
 
-              {filteredAbsentees.length === 0 && (
+              {filteredDiscrepancies.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ padding: '36px', textAlign: 'center', color: '#10b981', fontWeight: 600 }}>
-                    🎉 Excellent! No students with 3+ consecutive unjustified absences found.
+                  <td colSpan={10} style={{ padding: '36px', textAlign: 'center', color: '#10b981', fontWeight: 600 }}>
+                    🎉 No discrepancies found! All students on leave have valid and clean attendance records.
                   </td>
                 </tr>
               )}
@@ -1046,11 +1102,11 @@ export const DashboardOverview: React.FC = () => {
       {/* DASHBOARD JUSTIFICATION POP-UP MODAL */}
       {justifyModal?.isOpen && createPortal(
         <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setJustifyModal(null); }}>
-          <div className="modal-content-card" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content-card" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
-                  Record Absence Justification
+                  Verify & Justify Student Presence
                 </h3>
                 <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
                   {justifyModal.student.name} ({justifyModal.student.student_code}) • {justifyModal.student.floor_name || `Floor ${justifyModal.student.floor_id}`} • Room {justifyModal.student.room_number || 'N/A'}
@@ -1062,6 +1118,30 @@ export const DashboardOverview: React.FC = () => {
               >
                 <X size={20} />
               </button>
+            </div>
+
+            {/* Leave Details Summary Box */}
+            <div style={{
+              padding: '12px 14px',
+              backgroundColor: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px',
+              marginBottom: '16px',
+              fontSize: '13px',
+              color: '#1e3a8a'
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                🌴 Leave Period: {formatDateShort(justifyModal.student.leave_start)} to {formatDateShort(justifyModal.student.leave_end)}
+                {justifyModal.student.leave_reason && ` ("${justifyModal.student.leave_reason}")`}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                <span style={{ fontWeight: 600 }}>Marked on:</span>
+                {(justifyModal.student.marked_dates || []).map((d: string) => (
+                  <span key={d} style={{ padding: '2px 6px', backgroundColor: '#dbeafe', color: '#1d4ed8', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>
+                    {formatDateShort(d)}
+                  </span>
+                ))}
+              </div>
             </div>
 
             {justifyModal.error && (
@@ -1085,13 +1165,13 @@ export const DashboardOverview: React.FC = () => {
 
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                Why was the student absent for 3+ consecutive days? <span style={{ color: '#ef4444' }}>* (Required)</span>
+                Student Meeting & Verification Notes <span style={{ color: '#ef4444' }}>* (Required)</span>
               </label>
               <textarea
                 rows={4}
                 value={justifyModal.reason}
                 onChange={e => setJustifyModal({ ...justifyModal, reason: e.target.value, error: undefined })}
-                placeholder="Enter detailed reason (e.g. Hospitalized with dengue, Approved home leave, College sports tournament)..."
+                placeholder="Enter meeting details (e.g. Met student in hostel room 302, student returned 2 days early from home leave, physically verified presence)..."
                 style={{ 
                   width: '100%', 
                   padding: '12px 14px', 
@@ -1127,7 +1207,7 @@ export const DashboardOverview: React.FC = () => {
                 onClick={handleSaveJustification}
                 style={{ 
                   padding: '10px 20px', 
-                  background: '#3b82f6', 
+                  background: '#10b981', 
                   color: '#ffffff', 
                   border: 'none', 
                   borderRadius: '8px', 
@@ -1136,10 +1216,12 @@ export const DashboardOverview: React.FC = () => {
                   fontSize: '13px',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(16,185,129,0.3)'
                 }}
               >
-                {submittingJustify ? 'Saving...' : 'Save & Clear Defaulter'}
+                <CheckCircle2 size={15} />
+                {submittingJustify ? 'Saving...' : 'Confirm Met & Justify'}
               </button>
             </div>
           </div>
