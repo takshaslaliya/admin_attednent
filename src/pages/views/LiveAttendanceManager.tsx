@@ -39,6 +39,31 @@ interface ManualModalState {
   description: string;
 }
 
+const formatISTTime = (dateStr?: string | null) => {
+  if (!dateStr) return '—';
+  try {
+    let d: Date;
+    if (typeof dateStr === 'string' && !dateStr.includes('T') && !dateStr.includes('Z') && dateStr.includes(' ')) {
+      d = new Date(dateStr.replace(' ', 'T') + 'Z');
+      if (isNaN(d.getTime())) {
+        d = new Date(dateStr);
+      }
+    } else {
+      d = new Date(dateStr);
+    }
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }).toUpperCase();
+  } catch (e) {
+    return '—';
+  }
+};
+
 interface JustifyModalState {
   isOpen: boolean;
   student: any;
@@ -1667,6 +1692,11 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                 <th style={{ padding: '12px 14px' }}>Name</th>
                 <th style={{ padding: '12px 14px' }}>Floor / Room</th>
                 <th style={{ padding: '12px 14px' }}>Status</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Clock size={14} color="#64748b" /> Time (IST)
+                  </div>
+                </th>
                 <th style={{ padding: '12px 14px' }}>Notes / Remarks</th>
                 {!isViewOnly && (
                   <th style={{ padding: '12px 14px', textAlign: 'right' }}>Action</th>
@@ -1717,6 +1747,27 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                       {s.status === 'Leave' ? '🏖️ Leave' : s.status}
                     </span>
                   </td>
+                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                    {s.marked_at && (s.status === 'Present' || s.status === 'Late') ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#1e293b',
+                        backgroundColor: '#f8fafc',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        <Clock size={12} color="#64748b" />
+                        {formatISTTime(s.marked_at)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#94a3b8', fontSize: '13px' }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: '12px 14px', maxWidth: '240px' }}>
                     <ExpandableReasonTooltip
                       text={s.remarks || s.reason || ''}
@@ -1751,7 +1802,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               ))}
               {filteredAttendance.length === 0 && (
                 <tr>
-                  <td colSpan={isViewOnly ? 5 : 6} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>
+                  <td colSpan={isViewOnly ? 6 : 7} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>
                     No students match the criteria for {attendanceDate}.
                   </td>
                 </tr>
