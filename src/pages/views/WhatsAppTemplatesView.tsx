@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { 
   FileText, 
   Plus, 
@@ -415,9 +415,22 @@ export const WhatsAppTemplatesView: React.FC = () => {
     navigate('/messages');
   };
 
-  // Helper to insert formatting or variable into textarea
+  const templateTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const templateSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+
+  const updateTemplateSelection = () => {
+    const el = templateTextareaRef.current || (document.getElementById('template-textarea') as HTMLTextAreaElement);
+    if (el) {
+      templateSelectionRef.current = {
+        start: el.selectionStart,
+        end: el.selectionEnd
+      };
+    }
+  };
+
+  // Helper to insert formatting or variable into textarea at exact cursor position
   const insertTextAtCursor = (textToInsert: string, wrapChars?: { start: string; end: string }) => {
-    const textarea = document.getElementById('template-textarea') as HTMLTextAreaElement;
+    const textarea = templateTextareaRef.current || (document.getElementById('template-textarea') as HTMLTextAreaElement);
     if (!textarea) {
       setEditingTemplate(prev => ({
         ...prev,
@@ -426,25 +439,30 @@ export const WhatsAppTemplatesView: React.FC = () => {
       return;
     }
 
-    const startPos = textarea.selectionStart;
-    const endPos = textarea.selectionEnd;
-    const currentVal = textarea.value;
+    const startPos = textarea.selectionStart ?? templateSelectionRef.current.start;
+    const endPos = textarea.selectionEnd ?? templateSelectionRef.current.end;
+    const currentVal = editingTemplate?.content || textarea.value || '';
 
     let newVal = '';
+    let newCursorPos = startPos;
+
     if (wrapChars && startPos !== endPos) {
       // Wrap selected text
       const selected = currentVal.substring(startPos, endPos);
       newVal = currentVal.substring(0, startPos) + wrapChars.start + selected + wrapChars.end + currentVal.substring(endPos);
+      newCursorPos = startPos + wrapChars.start.length + selected.length + wrapChars.end.length;
     } else {
       newVal = currentVal.substring(0, startPos) + textToInsert + currentVal.substring(endPos);
+      newCursorPos = startPos + textToInsert.length;
     }
 
     setEditingTemplate(prev => ({ ...prev, content: newVal }));
+    templateSelectionRef.current = { start: newCursorPos, end: newCursorPos };
+
     setTimeout(() => {
       textarea.focus();
-      const newCursorPos = startPos + (wrapChars ? wrapChars.start.length : textToInsert.length);
       textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 50);
+    }, 10);
   };
 
   const copyTemplateContent = (tpl: WhatsAppTemplate) => {
@@ -1361,6 +1379,7 @@ export const WhatsAppTemplatesView: React.FC = () => {
                     <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', marginRight: '4px' }}>Format:</span>
                     <button
                       type="button"
+                      onMouseDown={e => e.preventDefault()}
                       onClick={() => insertTextAtCursor('*bold*', { start: '*', end: '*' })}
                       style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontWeight: 800 }}
                       title="Bold (*text*)"
@@ -1369,6 +1388,7 @@ export const WhatsAppTemplatesView: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      onMouseDown={e => e.preventDefault()}
                       onClick={() => insertTextAtCursor('_italic_', { start: '_', end: '_' })}
                       style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', fontStyle: 'italic' }}
                       title="Italic (_text_)"
@@ -1377,6 +1397,7 @@ export const WhatsAppTemplatesView: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      onMouseDown={e => e.preventDefault()}
                       onClick={() => insertTextAtCursor('~strike~', { start: '~', end: '~' })}
                       style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', textDecoration: 'line-through' }}
                       title="Strikethrough (~text~)"
@@ -1385,6 +1406,7 @@ export const WhatsAppTemplatesView: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      onMouseDown={e => e.preventDefault()}
                       onClick={() => insertTextAtCursor('• ')}
                       style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}
                       title="Bullet Point"
@@ -1397,9 +1419,17 @@ export const WhatsAppTemplatesView: React.FC = () => {
                 {/* Textarea */}
                 <textarea
                   id="template-textarea"
+                  ref={templateTextareaRef}
                   rows={6}
                   value={editingTemplate.content || ''}
-                  onChange={e => setEditingTemplate({ ...editingTemplate, content: e.target.value })}
+                  onChange={e => {
+                    setEditingTemplate({ ...editingTemplate, content: e.target.value });
+                    updateTemplateSelection();
+                  }}
+                  onSelect={updateTemplateSelection}
+                  onClick={updateTemplateSelection}
+                  onKeyUp={updateTemplateSelection}
+                  onBlur={updateTemplateSelection}
                   placeholder="Type your message template here..."
                   style={{
                     width: '100%',
@@ -1430,6 +1460,7 @@ export const WhatsAppTemplatesView: React.FC = () => {
                           <button
                             key={v.key}
                             type="button"
+                            onMouseDown={e => e.preventDefault()}
                             onClick={() => insertTextAtCursor(` ${v.key} `)}
                             title={v.desc}
                             style={{

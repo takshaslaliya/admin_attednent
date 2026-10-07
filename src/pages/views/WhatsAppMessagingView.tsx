@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   Send, 
   CheckSquare, 
@@ -47,6 +47,18 @@ export const WhatsAppMessagingView: React.FC = () => {
   const [messageText, setMessageText] = useState<string>(
     'Jai Swaminarayan {name},\nThis is a notification regarding your {session_name} on {date}.\nStatus: {status}\nRoom: {room number}, Floor: {floor}.\nPlease ensure timely presence.'
   );
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+
+  const updateSelection = () => {
+    if (textareaRef.current) {
+      selectionRef.current = {
+        start: textareaRef.current.selectionStart,
+        end: textareaRef.current.selectionEnd
+      };
+    }
+  };
   
   const [loading, setLoading] = useState(false);
   const [students, setStudents] = useState<any[]>([]);
@@ -369,8 +381,36 @@ export const WhatsAppMessagingView: React.FC = () => {
     }
   };
 
-  const insertTag = (tag: string) => {
-    setMessageText(prev => prev + ' ' + tag);
+  const insertTag = (tag: string, wrapChars?: { start: string; end: string }) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setMessageText(prev => prev + tag);
+      return;
+    }
+
+    const startPos = textarea.selectionStart ?? selectionRef.current.start;
+    const endPos = textarea.selectionEnd ?? selectionRef.current.end;
+    const currentVal = messageText;
+
+    let newVal = '';
+    let newCursorPos = startPos;
+
+    if (wrapChars && startPos !== endPos) {
+      const selected = currentVal.substring(startPos, endPos);
+      newVal = currentVal.substring(0, startPos) + wrapChars.start + selected + wrapChars.end + currentVal.substring(endPos);
+      newCursorPos = startPos + wrapChars.start.length + selected.length + wrapChars.end.length;
+    } else {
+      newVal = currentVal.substring(0, startPos) + tag + currentVal.substring(endPos);
+      newCursorPos = startPos + tag.length;
+    }
+
+    setMessageText(newVal);
+    selectionRef.current = { start: newCursorPos, end: newCursorPos };
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 10);
   };
 
   const handleSendMessages = async () => {
@@ -959,6 +999,7 @@ export const WhatsAppMessagingView: React.FC = () => {
               <button
                 key={v.key}
                 type="button"
+                onMouseDown={e => e.preventDefault()}
                 onClick={() => insertTag(v.key)}
                 style={{
                   padding: '4px 10px',
@@ -980,7 +1021,8 @@ export const WhatsAppMessagingView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f8fafc', padding: '2px 6px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
             <button
               type="button"
-              onClick={() => insertTag('*bold*')}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => insertTag('*bold*', { start: '*', end: '*' })}
               style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer', fontSize: '11px', fontWeight: 800 }}
               title="Bold (*text*)"
             >
@@ -988,7 +1030,8 @@ export const WhatsAppMessagingView: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => insertTag('_italic_')}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => insertTag('_italic_', { start: '_', end: '_' })}
               style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer', fontSize: '11px', fontStyle: 'italic' }}
               title="Italic (_text_)"
             >
@@ -996,7 +1039,8 @@ export const WhatsAppMessagingView: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => insertTag('~strike~')}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => insertTag('~strike~', { start: '~', end: '~' })}
               style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer', fontSize: '11px', textDecoration: 'line-through' }}
               title="Strike (~text~)"
             >
@@ -1004,6 +1048,7 @@ export const WhatsAppMessagingView: React.FC = () => {
             </button>
             <button
               type="button"
+              onMouseDown={e => e.preventDefault()}
               onClick={() => insertTag('• ')}
               style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}
               title="Bullet point"
@@ -1014,9 +1059,17 @@ export const WhatsAppMessagingView: React.FC = () => {
         </div>
 
         <textarea
+          ref={textareaRef}
           rows={5}
           value={messageText}
-          onChange={e => setMessageText(e.target.value)}
+          onChange={e => {
+            setMessageText(e.target.value);
+            updateSelection();
+          }}
+          onSelect={updateSelection}
+          onClick={updateSelection}
+          onKeyUp={updateSelection}
+          onBlur={updateSelection}
           placeholder="Enter message template..."
           style={{ width: '100%', marginBottom: '16px', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '13.5px', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }}
         />
