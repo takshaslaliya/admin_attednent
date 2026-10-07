@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -12,9 +12,10 @@ import {
   ShieldAlert, 
   UserCheck, 
   Palmtree, 
-  Key,
-  KeyRound,
-  FileText,
+  Key, 
+  KeyRound, 
+  FileText, 
+  ChevronDown,
   X 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -88,7 +89,16 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const isStrings = pathname === '/strings' || pathname === '/floor-strings' || pathname === '/generate-string';
   const isMessages = pathname === '/messages';
   const isTemplates = pathname === '/templates' || pathname === '/whatsapp-templates';
+  const isWhatsAppActive = isMessages || isTemplates;
   const isAddSession = pathname === '/session_add' || pathname === '/add_session';
+
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(isWhatsAppActive);
+
+  useEffect(() => {
+    if (isWhatsAppActive) {
+      setIsWhatsAppOpen(true);
+    }
+  }, [isWhatsAppActive]);
 
   return (
     <>
@@ -167,23 +177,44 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         )}
 
         {canShowWhatsApp && (
-          <>
+          <div className="nav-group">
             <button
-              className={`nav-item-btn ${isMessages ? 'active' : ''}`}
-              onClick={() => handleNavClick('/messages')}
+              type="button"
+              className={`nav-item-btn nav-group-btn ${isWhatsAppActive ? 'parent-active' : ''}`}
+              onClick={() => setIsWhatsAppOpen(prev => !prev)}
             >
-              <MessageSquare size={18} className="nav-icon" />
-              <span>WhatsApp Messaging</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <MessageSquare size={18} className="nav-icon" style={{ color: '#25D366' }} />
+                <span>WhatsApp</span>
+              </div>
+              <ChevronDown 
+                size={16} 
+                className={`nav-chevron ${isWhatsAppOpen ? 'open' : ''}`} 
+              />
             </button>
 
-            <button
-              className={`nav-item-btn ${isTemplates ? 'active' : ''}`}
-              onClick={() => handleNavClick('/templates')}
-            >
-              <FileText size={18} className="nav-icon" style={{ color: '#22c55e' }} />
-              <span>WhatsApp Templates</span>
-            </button>
-          </>
+            {isWhatsAppOpen && (
+              <div className="nav-submenu">
+                <button
+                  className={`nav-subitem-btn ${isMessages ? 'active' : ''}`}
+                  onClick={() => handleNavClick('/messages')}
+                >
+                  <span className="subitem-bullet"></span>
+                  <MessageSquare size={15} className="subitem-icon" />
+                  <span>WhatsApp Messaging</span>
+                </button>
+
+                <button
+                  className={`nav-subitem-btn ${isTemplates ? 'active' : ''}`}
+                  onClick={() => handleNavClick('/templates')}
+                >
+                  <span className="subitem-bullet"></span>
+                  <FileText size={15} className="subitem-icon" style={{ color: '#22c55e' }} />
+                  <span>WhatsApp Templates</span>
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         {canShowLeaves && (
