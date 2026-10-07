@@ -105,24 +105,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const isAddSession = pathname === '/session_add' || pathname === '/add_session';
   const isSessionsActive = pathname.startsWith('/session/') || isAddSession;
 
-  // Category collapsible state
+  // Category collapsible state (only open active category by default)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    attendance: isAttendanceActive || false,
-    students: isStudentsActive || false,
-    whatsapp: isWhatsAppActive || false,
-    security: isSecurityActive || false,
-    sessions: true
+    attendance: isAttendanceActive,
+    students: isStudentsActive,
+    whatsapp: isWhatsAppActive,
+    security: isSecurityActive,
+    sessions: isSessionsActive
   });
 
   useEffect(() => {
-    setOpenSections(prev => ({
-      ...prev,
-      attendance: prev.attendance || isAttendanceActive,
-      students: prev.students || isStudentsActive,
-      whatsapp: prev.whatsapp || isWhatsAppActive,
-      security: prev.security || isSecurityActive,
-      sessions: prev.sessions || isSessionsActive,
-    }));
+    if (isAttendanceActive) setOpenSections(prev => ({ ...prev, attendance: true }));
+    if (isStudentsActive) setOpenSections(prev => ({ ...prev, students: true }));
+    if (isWhatsAppActive) setOpenSections(prev => ({ ...prev, whatsapp: true }));
+    if (isSecurityActive) setOpenSections(prev => ({ ...prev, security: true }));
+    if (isSessionsActive) setOpenSections(prev => ({ ...prev, sessions: true }));
   }, [isAttendanceActive, isStudentsActive, isWhatsAppActive, isSecurityActive, isSessionsActive]);
 
   const toggleSection = (key: string) => {
