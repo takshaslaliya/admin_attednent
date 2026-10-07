@@ -14,6 +14,7 @@ import { DeviceSecurityView } from './views/DeviceSecurityView';
 import { LeavesManagementView } from './views/LeavesManagementView';
 import { FloorStringsView } from './views/FloorStringsView';
 import { WhatsAppTemplatesView } from './views/WhatsAppTemplatesView';
+import { SessionViewerCredentialsView } from './views/SessionViewerCredentialsView';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -69,6 +70,9 @@ export const AdminLayout: React.FC = () => {
     if (p === '/leaders') {
       return { title: 'User Credentials Management', subtitle: 'Create, assign multiple floors, and manage user login credentials' };
     }
+    if (p === '/session-viewers') {
+      return { title: 'Session Viewer Credentials', subtitle: 'Assign unique access numbers to view live attendance only for selected sessions' };
+    }
     if (p === '/strings' || p === '/floor-strings' || p === '/generate-string') {
       return { title: 'Floor String Generator', subtitle: 'Generate and manage floor-wise unique security strings (1 string per floor)' };
     }
@@ -120,6 +124,7 @@ export const AdminLayout: React.FC = () => {
             <Route path="/attendance" element={<AttendanceReportsView />} />
             <Route path="/students" element={<StudentsManagementView />} />
             <Route path="/leaders" element={!isLeader ? <LeadersManagementView /> : <Navigate to="/" replace />} />
+            <Route path="/session-viewers" element={!isLeader ? <SessionViewerCredentialsView /> : <Navigate to="/" replace />} />
             <Route path="/strings" element={!isLeader ? <FloorStringsView /> : <Navigate to="/" replace />} />
             <Route path="/floor-strings" element={!isLeader ? <FloorStringsView /> : <Navigate to="/" replace />} />
             <Route path="/generate-string" element={!isLeader ? <FloorStringsView /> : <Navigate to="/" replace />} />

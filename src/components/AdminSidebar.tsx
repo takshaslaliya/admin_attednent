@@ -92,7 +92,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
   const isStudents = pathname === '/students';
   const isLeaders = pathname === '/leaders';
-  const isStudentsActive = isStudents || isLeaders;
+  const isSessionViewers = pathname === '/session-viewers';
+  const isStudentsActive = isStudents || isLeaders || isSessionViewers;
 
   const isMessages = pathname === '/messages';
   const isTemplates = pathname === '/templates' || pathname === '/whatsapp-templates';
@@ -241,14 +242,25 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               </button>
 
               {!isLeader && (
-                <button
-                  className={`nav-subitem-btn ${isLeaders ? 'active' : ''}`}
-                  onClick={() => handleNavClick('/leaders')}
-                >
-                  <span className="subitem-bullet"></span>
-                  <Key size={15} className="subitem-icon" style={{ color: '#f59e0b' }} />
-                  <span>User Credentials</span>
-                </button>
+                <>
+                  <button
+                    className={`nav-subitem-btn ${isLeaders ? 'active' : ''}`}
+                    onClick={() => handleNavClick('/leaders')}
+                  >
+                    <span className="subitem-bullet"></span>
+                    <Key size={15} className="subitem-icon" style={{ color: '#f59e0b' }} />
+                    <span>User Credentials</span>
+                  </button>
+
+                  <button
+                    className={`nav-subitem-btn ${isSessionViewers ? 'active' : ''}`}
+                    onClick={() => handleNavClick('/session-viewers')}
+                  >
+                    <span className="subitem-bullet"></span>
+                    <KeyRound size={15} className="subitem-icon" style={{ color: '#8b5cf6' }} />
+                    <span>Live Viewer Numbers</span>
+                  </button>
+                </>
               )}
             </div>
           )}
