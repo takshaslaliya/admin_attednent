@@ -16,6 +16,7 @@ import { FloorStringsView } from './views/FloorStringsView';
 import { WhatsAppTemplatesView } from './views/WhatsAppTemplatesView';
 import { SessionViewerCredentialsView } from './views/SessionViewerCredentialsView';
 import { FormsManagementView } from './views/FormsManagementView';
+import { FormAnalyticsDetailView } from './views/FormAnalyticsDetailView';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -83,6 +84,9 @@ export const AdminLayout: React.FC = () => {
     if (p === '/templates' || p === '/whatsapp-templates') {
       return { title: 'WhatsApp Message Templates', subtitle: 'Create & manage reusable message templates with dynamic variables and images' };
     }
+    if (p.startsWith('/forms/') && (p.includes('/analytics') || p.includes('/report'))) {
+      return { title: 'Form Analytics & Report', subtitle: 'Detailed student responses, vote breakdowns, and participation logs' };
+    }
     if (p === '/forms' || p === '/polls') {
       return { title: 'Forms & Polls Management', subtitle: 'Create surveys, polls, view response analytics and track student engagement' };
     }
@@ -137,6 +141,8 @@ export const AdminLayout: React.FC = () => {
             <Route path="/whatsapp-templates" element={<WhatsAppTemplatesView />} />
             <Route path="/forms" element={<FormsManagementView />} />
             <Route path="/polls" element={<FormsManagementView />} />
+            <Route path="/forms/:formId/analytics" element={<FormAnalyticsDetailView />} />
+            <Route path="/forms/:formId/report" element={<FormAnalyticsDetailView />} />
             <Route path="/leaves" element={<LeavesManagementView />} />
             <Route path="/security" element={<DeviceSecurityView />} />
             <Route path="/session_add" element={!isLeader ? <CreateSessionView onAdded={() => { fetchSessions(); navigate('/'); }} /> : <Navigate to="/" replace />} />

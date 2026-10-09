@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ClipboardList, 
   Plus, 
@@ -60,6 +61,7 @@ interface FormItem {
 }
 
 export const FormsManagementView: React.FC = () => {
+  const navigate = useNavigate();
   const { showConfirm } = useConfirm();
   const [forms, setForms] = useState<FormItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,13 +88,6 @@ export const FormsManagementView: React.FC = () => {
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentSearchText, setStudentSearchText] = useState('');
   const [studentFloorFilter, setStudentFloorFilter] = useState<string>('all');
-
-  // Analytics Modal State
-  const [analyticsModalOpen, setAnalyticsModalOpen] = useState(false);
-  const [selectedAnalytics, setSelectedAnalytics] = useState<any | null>(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsTab, setAnalyticsTab] = useState<'charts' | 'responses' | 'seen' | 'pending'>('charts');
-  const [responseSearch, setResponseSearch] = useState('');
 
   // Auxiliary floor options
   const [availableFloors, setAvailableFloors] = useState<any[]>([]);
@@ -407,80 +402,22 @@ export const FormsManagementView: React.FC = () => {
       confirmVariant: 'danger',
       onConfirm: async () => {
         try {
-          await apiClient.delete(`/forms/${form.id}`);
+          await apiClient.post(`/forms/${form.id}/delete`, {});
           setForms(prev => prev.filter(f => f.id !== form.id));
-        } catch (e) {
-          alert('Failed to delete form');
+        } catch (e: any) {
+          try {
+            await apiClient.delete(`/forms/${form.id}`);
+            setForms(prev => prev.filter(f => f.id !== form.id));
+          } catch (delErr: any) {
+            alert(delErr.response?.data?.message || 'Failed to delete form');
+          }
         }
       }
     });
   };
 
-  const handleOpenAnalytics = async (form: FormItem) => {
-    setAnalyticsModalOpen(true);
-    setAnalyticsLoading(true);
-    setAnalyticsTab('charts');
-    setSelectedAnalytics(null);
-
-    try {
-      const res = await apiClient.get(`/forms/${form.id}/analytics`, { skipCache: true } as any);
-      if ((res.data.success || res.data.status === 'ok') && res.data.data) {
-        setSelectedAnalytics(res.data.data);
-      }
-    } catch (e) {
-      console.error('Failed to load form analytics:', e);
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  };
-
-  const exportResponsesCSV = () => {
-    if (!selectedAnalytics || !selectedAnalytics.responses) return;
-    const respList = selectedAnalytics.responses;
-    const formFields = selectedAnalytics.form?.fields || [];
-
-    const headers = ['Student ID', 'Student Code', 'Name', 'Room', 'Floor', 'Phone', 'Submitted At'];
-    for (const f of formFields) {
-      headers.push(`"${(f.label || f.id).replace(/"/g, '""')}"`);
-    }
-
-    const rows = respList.map((r: any) => {
-      const row = [
-        r.student_id,
-        r.student_code || '',
-        `"${(r.student_name || '').replace(/"/g, '""')}"`,
-        r.room_number || '',
-        r.floor_id || '',
-        r.phone || '',
-        r.submitted_at || ''
-      ];
-
-      for (const f of formFields) {
-        const val = r.answers[f.id || f.key || f.label];
-        const formattedVal = Array.isArray(val) ? val.join('; ') : (val !== undefined && val !== null ? String(val) : '');
-        row.push(`"${formattedVal.replace(/"/g, '""')}"`);
-      }
-      return row.join(',');
-    });
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `form_responses_${selectedAnalytics.form?.id || 'export'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const sendWhatsAppReminder = (phone: string, studentName: string) => {
-    if (!phone) {
-      alert('Student does not have a phone number on file.');
-      return;
-    }
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const msg = encodeURIComponent(`Hello ${studentName}, this is a reminder from AVD Hostel Administration to fill out the form "${selectedAnalytics?.form?.title}". Please open your student portal to complete it.`);
-    window.open(`https://wa.me/91${cleanPhone}?text=${msg}`, '_blank');
+  const handleOpenAnalytics = (form: FormItem) => {
+    navigate(`/forms/${form.id}/analytics`);
   };
 
   return (
@@ -1145,296 +1082,6 @@ export const FormsManagementView: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* DETAILED ANALYTICS & RESPONSES MODAL */}
-      {analyticsModalOpen && (
-        <div className="admin-modal-overlay">
-          <div className="admin-modal-container wide-modal">
-            
-            <div className="admin-modal-header">
-              <div>
-                <h2 className="admin-modal-title">
-                  {selectedAnalytics?.form?.title || 'Form Analytics & Responses'}
-                </h2>
-                <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '2px 0 0 0' }}>
-                  {selectedAnalytics?.form?.form_type === 'poll' ? 'Poll Results' : 'Form Responses'} · {selectedAnalytics?.summary?.total_responded || 0} Submissions
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button 
-                  className="create-form-btn" 
-                  style={{ padding: '6px 12px', fontSize: '0.82rem', background: '#059669' }}
-                  onClick={exportResponsesCSV}
-                >
-                  <Download size={14} /> Export CSV
-                </button>
-                <button className="action-icon-btn" onClick={() => setAnalyticsModalOpen(false)}>
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            <div className="admin-modal-body">
-              {analyticsLoading ? (
-                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
-                  Calculating analytics and student responses...
-                </div>
-              ) : !selectedAnalytics ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#dc2626' }}>
-                  Failed to load analytics.
-                </div>
-              ) : (
-                <>
-                  {/* KPI Summary Cards */}
-                  <div className="analytics-stats-grid">
-                    <div className="stat-kpi-card">
-                      <span className="stat-kpi-label">Targeted Students</span>
-                      <span className="stat-kpi-val">{selectedAnalytics.summary.total_targeted}</span>
-                    </div>
-                    <div className="stat-kpi-card success-card">
-                      <span className="stat-kpi-label">Responded ({selectedAnalytics.summary.response_rate}%)</span>
-                      <span className="stat-kpi-val">{selectedAnalytics.summary.total_responded}</span>
-                    </div>
-                    <div className="stat-kpi-card warning-card">
-                      <span className="stat-kpi-label">Seen But Not Answered</span>
-                      <span className="stat-kpi-val">{selectedAnalytics.summary.seen_not_answered}</span>
-                    </div>
-                    <div className="stat-kpi-card">
-                      <span className="stat-kpi-label">Never Opened</span>
-                      <span className="stat-kpi-val">{selectedAnalytics.summary.never_seen}</span>
-                    </div>
-                  </div>
-
-                  {/* Tabs */}
-                  <div className="analytics-tabs-header">
-                    <button 
-                      className={`analytics-tab-btn ${analyticsTab === 'charts' ? 'active' : ''}`}
-                      onClick={() => setAnalyticsTab('charts')}
-                    >
-                      📊 Visual Results & Poll Breakdown
-                    </button>
-                    <button 
-                      className={`analytics-tab-btn ${analyticsTab === 'responses' ? 'active' : ''}`}
-                      onClick={() => setAnalyticsTab('responses')}
-                    >
-                      📝 All Responses ({selectedAnalytics.responses.length})
-                    </button>
-                    <button 
-                      className={`analytics-tab-btn ${analyticsTab === 'seen' ? 'active' : ''}`}
-                      onClick={() => setAnalyticsTab('seen')}
-                    >
-                      👀 Seen But Not Answered ({selectedAnalytics.seen_not_answered.length})
-                    </button>
-                    <button 
-                      className={`analytics-tab-btn ${analyticsTab === 'pending' ? 'active' : ''}`}
-                      onClick={() => setAnalyticsTab('pending')}
-                    >
-                      ⏳ Not Responded ({selectedAnalytics.not_responded.length})
-                    </button>
-                  </div>
-
-                  {/* TAB 1: CHARTS & BREAKDOWN */}
-                  {analyticsTab === 'charts' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      {Object.keys(selectedAnalytics.field_analytics || {}).length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                          No choice questions available for chart visualization.
-                        </div>
-                      ) : (
-                        Object.values(selectedAnalytics.field_analytics).map((fieldAnalytic: any) => (
-                          <div key={fieldAnalytic.field_id} className="poll-breakdown-card">
-                            <h4 className="poll-question-title">{fieldAnalytic.label}</h4>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                              {fieldAnalytic.breakdown.map((optItem: any, idx: number) => (
-                                <div key={idx} className="poll-option-row">
-                                  <div className="poll-option-header">
-                                    <span>{optItem.option}</span>
-                                    <span>{optItem.count} votes ({optItem.percentage}%)</span>
-                                  </div>
-                                  <div className="poll-option-bar-track">
-                                    <div className="poll-option-bar-fill" style={{ width: `${optItem.percentage}%` }}></div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-
-                  {/* TAB 2: ALL RESPONSES TABLE */}
-                  {analyticsTab === 'responses' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                        <table className="responses-table">
-                          <thead>
-                            <tr>
-                              <th>Student</th>
-                              <th>Room</th>
-                              <th>Floor</th>
-                              <th>Phone</th>
-                              <th>Submitted Time</th>
-                              {(selectedAnalytics.form?.fields || []).map((f: any) => (
-                                <th key={f.id}>{f.label}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedAnalytics.responses.length === 0 ? (
-                              <tr>
-                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                                  No responses received yet.
-                                </td>
-                              </tr>
-                            ) : (
-                              selectedAnalytics.responses.map((resp: any) => (
-                                <tr key={resp.id}>
-                                  <td>
-                                    <div style={{ fontWeight: 800 }}>{resp.student_name}</div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>🪪 {resp.student_code || `#${resp.student_id}`}</div>
-                                  </td>
-                                  <td><b>{resp.room_number || 'N/A'}</b></td>
-                                  <td>Floor {resp.floor_id || 'N/A'}</td>
-                                  <td>{resp.phone || '—'}</td>
-                                  <td>{new Date(resp.submitted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                                  {(selectedAnalytics.form?.fields || []).map((f: any) => {
-                                    const ans = resp.answers[f.id || f.key || f.label];
-                                    return (
-                                      <td key={f.id}>
-                                        {Array.isArray(ans) ? ans.join(', ') : (ans !== undefined && ans !== null ? String(ans) : '—')}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 3: SEEN BUT NOT ANSWERED */}
-                  {analyticsTab === 'seen' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                        <table className="responses-table">
-                          <thead>
-                            <tr>
-                              <th>Student</th>
-                              <th>Room</th>
-                              <th>Floor</th>
-                              <th>Phone</th>
-                              <th>First Viewed At</th>
-                              <th>Last Viewed At</th>
-                              <th>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedAnalytics.seen_not_answered.length === 0 ? (
-                              <tr>
-                                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#059669', fontWeight: 700 }}>
-                                  ✓ Great! No students have viewed without submitting.
-                                </td>
-                              </tr>
-                            ) : (
-                              selectedAnalytics.seen_not_answered.map((s: any) => (
-                                <tr key={s.student_id}>
-                                  <td>
-                                    <div style={{ fontWeight: 800 }}>{s.student_name}</div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>🪪 {s.student_code || `#${s.student_id}`}</div>
-                                  </td>
-                                  <td><b>{s.room_number || 'N/A'}</b></td>
-                                  <td>Floor {s.floor_id || 'N/A'}</td>
-                                  <td>{s.phone || '—'}</td>
-                                  <td>{new Date(s.first_viewed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                                  <td>{new Date(s.last_viewed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                                  <td>
-                                    <button 
-                                      className="whatsapp-action-btn"
-                                      onClick={() => sendWhatsAppReminder(s.phone, s.student_name)}
-                                    >
-                                      <MessageSquare size={13} /> Remind
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 4: ALL NOT RESPONDED */}
-                  {analyticsTab === 'pending' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                        <table className="responses-table">
-                          <thead>
-                            <tr>
-                              <th>Student</th>
-                              <th>Room</th>
-                              <th>Floor</th>
-                              <th>Phone</th>
-                              <th>Portal View Status</th>
-                              <th>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {selectedAnalytics.not_responded.length === 0 ? (
-                              <tr>
-                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#059669', fontWeight: 700 }}>
-                                  🎉 100% Complete! All targeted students have submitted.
-                                </td>
-                              </tr>
-                            ) : (
-                              selectedAnalytics.not_responded.map((s: any) => (
-                                <tr key={s.student_id}>
-                                  <td>
-                                    <div style={{ fontWeight: 800 }}>{s.student_name}</div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>🪪 {s.student_code || `#${s.student_id}`}</div>
-                                  </td>
-                                  <td><b>{s.room_number || 'N/A'}</b></td>
-                                  <td>Floor {s.floor_id || 'N/A'}</td>
-                                  <td>{s.phone || '—'}</td>
-                                  <td>
-                                    {s.has_seen ? (
-                                      <span style={{ color: '#d97706', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                        <Eye size={13} /> Viewed on {new Date(s.last_viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                      </span>
-                                    ) : (
-                                      <span style={{ color: '#94a3b8', fontWeight: 600 }}>
-                                        Never Opened
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <button 
-                                      className="whatsapp-action-btn"
-                                      onClick={() => sendWhatsAppReminder(s.phone, s.student_name)}
-                                    >
-                                      <MessageSquare size={13} /> Remind
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                </>
-              )}
-            </div>
-
           </div>
         </div>
       )}
