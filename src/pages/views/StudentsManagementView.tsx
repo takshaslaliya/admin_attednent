@@ -1182,7 +1182,15 @@ export const StudentsManagementView: React.FC = () => {
                   {userRole !== 'LEADER' && (
                     <>
                       <button
-                        onClick={() => setAssignModal({isOpen: true, studentId: student.student_id || student.id, currentFloor: String(student.floor_id || ''), currentRoom: student.room_number || ''})}
+                        onClick={() => {
+                          const rVal = (student.room_number && String(student.room_number).toUpperCase() !== 'N/A') ? String(student.room_number) : '';
+                          setAssignModal({
+                            isOpen: true,
+                            studentId: student.student_id || student.id,
+                            currentFloor: String(student.floor_id || ''),
+                            currentRoom: rVal
+                          });
+                        }}
                         style={{ padding: '6px 10px', fontSize: '12px', fontWeight: 600, border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#334155', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                       >
                         <Edit2 size={13} /> Room
