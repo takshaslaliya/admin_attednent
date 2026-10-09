@@ -93,18 +93,17 @@ export const LeadersManagementView: React.FC = () => {
         apiClient.get('/students').catch(() => ({ data: { success: true, data: [] } }))
       ]);
 
-      if (leadersRes.data.success) {
-        setLeaders(leadersRes.data.data);
-      }
-      if (floorsRes.data.success) {
-        setFloors(floorsRes.data.data);
-      }
-      if (sessionsRes.data.success) {
-        setAvailableSessions(sessionsRes.data.data);
-      }
-      if (studentsRes.data.success) {
-        setStudents(studentsRes.data.data || []);
-      }
+      const lData = leadersRes?.data?.data || leadersRes?.data?.leaders || [];
+      setLeaders(Array.isArray(lData) ? lData : []);
+
+      const fData = floorsRes?.data?.data || floorsRes?.data?.floors || [];
+      setFloors(Array.isArray(fData) ? fData : []);
+
+      const sData = sessionsRes?.data?.data || sessionsRes?.data?.sessions || [];
+      setAvailableSessions(Array.isArray(sData) ? sData : []);
+
+      const stData = studentsRes?.data?.data || studentsRes?.data?.students || [];
+      setStudents(Array.isArray(stData) ? stData : []);
     } catch (err) {
       console.error('Failed to load leaders data', err);
     } finally {
@@ -315,21 +314,23 @@ export const LeadersManagementView: React.FC = () => {
   };
 
   // Filtering
-  const filteredLeaders = leaders.filter(leader => {
+  const filteredLeaders = (leaders || []).filter(leader => {
+    if (!leader) return false;
     const matchesSearch = 
-      leader.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      leader.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (leader.phone_number && leader.phone_number.includes(searchQuery));
+      (leader.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (leader.username || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (leader.phone_number && String(leader.phone_number).includes(searchQuery));
 
+    const assignedFloors = Array.isArray(leader.assigned_floors) ? leader.assigned_floors : [];
     const matchesFloor = 
       selectedFloorFilter === 'All' || 
-      leader.assigned_floors.includes(parseInt(selectedFloorFilter, 10));
+      assignedFloors.includes(parseInt(selectedFloorFilter, 10));
 
     return matchesSearch && matchesFloor;
   });
 
-  const totalAssignedStudents = leaders.reduce((acc, l) => acc + (l.total_students || 0), 0);
-  const uniqueCoveredFloors = new Set(leaders.flatMap(l => l.assigned_floors)).size;
+  const totalAssignedStudents = (leaders || []).reduce((acc, l) => acc + (l.total_students || 0), 0);
+  const uniqueCoveredFloors = new Set((leaders || []).flatMap(l => Array.isArray(l.assigned_floors) ? l.assigned_floors : [])).size;
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -353,7 +354,7 @@ export const LeadersManagementView: React.FC = () => {
             <div>
               <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active User Credentials</div>
               <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', marginTop: '6px' }}>
-                {leaders.filter(l => l.is_active).length}
+                {(leaders || []).filter(l => l.is_active).length}
               </div>
             </div>
             <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
@@ -627,7 +628,7 @@ export const LeadersManagementView: React.FC = () => {
                   {/* Assigned Floors Chips */}
                   <div style={{ marginTop: '14px' }}>
                     <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Assigned Floors ({leader.assigned_floors.length}):
+                      Assigned Floors ({(leader.assigned_floors || []).length}):
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                       {leader.floor_details && leader.floor_details.length > 0 ? (
@@ -653,7 +654,7 @@ export const LeadersManagementView: React.FC = () => {
                           </span>
                         ))
                       ) : (
-                        leader.assigned_floors.map(fid => (
+                        (leader.assigned_floors || []).map(fid => (
                           <span
                             key={`leader_${leader.id}_fid_${fid}`}
                             style={{
