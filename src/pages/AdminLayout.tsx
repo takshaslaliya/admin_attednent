@@ -15,6 +15,7 @@ import { LeavesManagementView } from './views/LeavesManagementView';
 import { FloorStringsView } from './views/FloorStringsView';
 import { WhatsAppTemplatesView } from './views/WhatsAppTemplatesView';
 import { SessionViewerCredentialsView } from './views/SessionViewerCredentialsView';
+import { FormsManagementView } from './views/FormsManagementView';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -82,6 +83,9 @@ export const AdminLayout: React.FC = () => {
     if (p === '/templates' || p === '/whatsapp-templates') {
       return { title: 'WhatsApp Message Templates', subtitle: 'Create & manage reusable message templates with dynamic variables and images' };
     }
+    if (p === '/forms' || p === '/polls') {
+      return { title: 'Forms & Polls Management', subtitle: 'Create surveys, polls, view response analytics and track student engagement' };
+    }
     if (p === '/security') {
       return { title: 'Proxy & Multi-Account Security Audit', subtitle: 'Detect and resolve cross-student logins from same IP / Device' };
     }
@@ -131,6 +135,8 @@ export const AdminLayout: React.FC = () => {
             <Route path="/messages" element={<WhatsAppMessagingView />} />
             <Route path="/templates" element={<WhatsAppTemplatesView />} />
             <Route path="/whatsapp-templates" element={<WhatsAppTemplatesView />} />
+            <Route path="/forms" element={<FormsManagementView />} />
+            <Route path="/polls" element={<FormsManagementView />} />
             <Route path="/leaves" element={<LeavesManagementView />} />
             <Route path="/security" element={<DeviceSecurityView />} />
             <Route path="/session_add" element={!isLeader ? <CreateSessionView onAdded={() => { fetchSessions(); navigate('/'); }} /> : <Navigate to="/" replace />} />

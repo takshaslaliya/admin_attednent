@@ -18,6 +18,8 @@ import {
   ChevronDown,
   Clock,
   Send,
+  ClipboardList,
+  Vote,
   X 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -98,6 +100,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const isMessages = pathname === '/messages';
   const isTemplates = pathname === '/templates' || pathname === '/whatsapp-templates';
   const isWhatsAppActive = isMessages || isTemplates;
+
+  const isForms = pathname === '/forms' || pathname === '/polls';
 
   const isStrings = pathname === '/strings' || pathname === '/floor-strings' || pathname === '/generate-string';
   const isSecurity = pathname === '/security';
@@ -353,6 +357,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             )}
           </div>
         )}
+
+        {/* Forms & Polls */}
+        <button
+          className={`nav-item-btn ${isForms ? 'active' : ''}`}
+          onClick={() => handleNavClick('/forms')}
+        >
+          <ClipboardList size={18} className="nav-icon" style={{ color: '#0ea5e9' }} />
+          <span>Forms & Polls</span>
+        </button>
 
         {/* 6. Live Sessions Category (Collapsible Sub-menu) */}
         {visibleSessions.length > 0 && (
