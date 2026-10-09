@@ -518,16 +518,34 @@ export const StudentsManagementView: React.FC = () => {
   const handleAssignFloor = async () => {
     if (!assignModal) return;
     try {
-      await apiClient.put(`/students/${assignModal.studentId}/room`, {
+      const res = await apiClient.put(`/students/${assignModal.studentId}/room`, {
         floor_id: assignModal.currentFloor || null,
         room_number: assignModal.currentRoom || null
       });
-      alert('Assigned successfully!');
-      fetchData();
-      setAssignModal(null);
-    } catch (err) {
+      if (res.data?.success) {
+        setStudents(prev => prev.map(s => {
+          const sId = s.student_id || s.id;
+          if (String(sId) === String(assignModal.studentId) || s.student_code === assignModal.studentId) {
+            const newRoom = assignModal.currentRoom && assignModal.currentRoom.trim() !== '' ? assignModal.currentRoom.trim() : null;
+            const isAct = (newRoom && newRoom.toUpperCase() !== 'N/A' && newRoom !== 'null') ? 1 : 0;
+            return {
+              ...s,
+              floor_id: assignModal.currentFloor || null,
+              room_number: newRoom,
+              is_active: isAct
+            };
+          }
+          return s;
+        }));
+        alert('Floor and room updated successfully!');
+        fetchData(false);
+        setAssignModal(null);
+      } else {
+        alert(res.data?.message || 'Failed to assign floor/room.');
+      }
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to assign floor/room.');
+      alert(err.response?.data?.message || 'Failed to assign floor/room.');
     }
   };
 
