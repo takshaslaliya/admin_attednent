@@ -382,10 +382,20 @@ export const FormsManagementView: React.FC = () => {
 
   const handleToggleActive = async (form: FormItem) => {
     try {
-      await apiClient.patch(`/forms/${form.id}/toggle`);
-      setForms(prev => prev.map(f => f.id === form.id ? { ...f, is_active: !f.is_active } : f));
-    } catch (e) {
-      alert('Failed to toggle form status');
+      const res = await apiClient.post(`/forms/${form.id}/toggle`, {});
+      const newActive = res.data?.is_active !== undefined ? res.data.is_active : !form.is_active;
+      setForms(prev => prev.map(f => {
+        if (f.id === form.id) {
+          return {
+            ...f,
+            is_active: newActive,
+            status: newActive ? 'active' : 'disabled'
+          };
+        }
+        return f;
+      }));
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to toggle form status');
     }
   };
 
@@ -413,8 +423,8 @@ export const FormsManagementView: React.FC = () => {
     setSelectedAnalytics(null);
 
     try {
-      const res = await apiClient.get(`/forms/${form.id}/analytics`);
-      if (res.data.success && res.data.data) {
+      const res = await apiClient.get(`/forms/${form.id}/analytics`, { skipCache: true } as any);
+      if ((res.data.success || res.data.status === 'ok') && res.data.data) {
         setSelectedAnalytics(res.data.data);
       }
     } catch (e) {
