@@ -43,7 +43,7 @@ interface FormItem {
   description?: string;
   form_type: 'poll' | 'form';
   fields: FormField[];
-  target_audience: 'all' | 'current' | 'alumni' | 'selected';
+  target_audience: 'all' | 'current' | 'alumni' | 'selected' | 'students' | 'floors';
   target_student_ids?: number[];
   target_floors?: any[];
   target_tags?: number[];
@@ -73,12 +73,19 @@ export const FormsManagementView: React.FC = () => {
   const [formDesc, setFormDesc] = useState('');
   const [formType, setFormType] = useState<'poll' | 'form'>('poll');
   const [isMandatory, setIsMandatory] = useState(false);
-  const [targetAudience, setTargetAudience] = useState<'all' | 'current' | 'alumni' | 'selected'>('all');
+  const [targetAudience, setTargetAudience] = useState<'all' | 'current' | 'alumni' | 'selected' | 'students' | 'floors'>('all');
   const [targetFloors, setTargetFloors] = useState<string[]>([]);
+  const [targetStudentIds, setTargetStudentIds] = useState<number[]>([]);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [fields, setFields] = useState<FormField[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Student directory & search states
+  const [availableStudents, setAvailableStudents] = useState<any[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentSearchText, setStudentSearchText] = useState('');
+  const [studentFloorFilter, setStudentFloorFilter] = useState<string>('all');
 
   // Analytics Modal State
   const [analyticsModalOpen, setAnalyticsModalOpen] = useState(false);
@@ -93,6 +100,7 @@ export const FormsManagementView: React.FC = () => {
   useEffect(() => {
     fetchForms();
     fetchFloors();
+    fetchStudents();
   }, []);
 
   const fetchForms = async () => {
@@ -118,6 +126,20 @@ export const FormsManagementView: React.FC = () => {
     } catch (e) {}
   };
 
+  const fetchStudents = async () => {
+    setStudentsLoading(true);
+    try {
+      const res = await apiClient.get('/students?status=all');
+      if (res.data.success && Array.isArray(res.data.data)) {
+        setAvailableStudents(res.data.data);
+      }
+    } catch (e) {
+      console.error('Failed to load students directory:', e);
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
+
   const filteredForms = useMemo(() => {
     return forms.filter(f => {
       const matchSearch = (f.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -132,6 +154,54 @@ export const FormsManagementView: React.FC = () => {
     });
   }, [forms, searchQuery, filterType]);
 
+  // Filter available students by search query (id, code, name, room) and floor filter
+  const filteredAudienceStudents = useMemo(() => {
+    const query = studentSearchText.trim().toLowerCase();
+    return availableStudents.filter(s => {
+      const sId = String(s.student_id ?? s.id ?? '');
+      const sCode = String(s.student_code ?? '');
+      const sName = String(s.name ?? '').toLowerCase();
+      const sRoom = String(s.room_number ?? '').toLowerCase();
+      const sFloor = String(s.floor_id ?? '');
+
+      if (studentFloorFilter !== 'all' && sFloor !== studentFloorFilter) {
+        return false;
+      }
+
+      if (!query) return true;
+
+      return (
+        sId.toLowerCase().includes(query) ||
+        sCode.toLowerCase().includes(query) ||
+        sName.includes(query) ||
+        sRoom.includes(query)
+      );
+    });
+  }, [availableStudents, studentSearchText, studentFloorFilter]);
+
+  const selectedStudentsList = useMemo(() => {
+    const idSet = new Set(targetStudentIds);
+    return availableStudents.filter(s => idSet.has(Number(s.student_id ?? s.id)));
+  }, [availableStudents, targetStudentIds]);
+
+  const handleToggleStudent = (studentId: number) => {
+    setTargetStudentIds(prev => 
+      prev.includes(studentId) 
+        ? prev.filter(id => id !== studentId) 
+        : [...prev, studentId]
+    );
+  };
+
+  const handleSelectAllFilteredStudents = () => {
+    const filteredIds = filteredAudienceStudents.map(s => Number(s.student_id ?? s.id));
+    setTargetStudentIds(prev => Array.from(new Set([...prev, ...filteredIds])));
+  };
+
+  const handleDeselectAllFilteredStudents = () => {
+    const filteredIdSet = new Set(filteredAudienceStudents.map(s => Number(s.student_id ?? s.id)));
+    setTargetStudentIds(prev => prev.filter(id => !filteredIdSet.has(id)));
+  };
+
   const handleOpenCreateModal = () => {
     setEditingFormId(null);
     setFormTitle('');
@@ -140,6 +210,9 @@ export const FormsManagementView: React.FC = () => {
     setIsMandatory(false);
     setTargetAudience('all');
     setTargetFloors([]);
+    setTargetStudentIds([]);
+    setStudentSearchText('');
+    setStudentFloorFilter('all');
     
     // Default start now, end in 3 days
     const now = new Date();
@@ -159,6 +232,9 @@ export const FormsManagementView: React.FC = () => {
       }
     ]);
     setModalOpen(true);
+    if (availableStudents.length === 0) {
+      fetchStudents();
+    }
   };
 
   const handleOpenEditModal = (form: FormItem) => {
@@ -167,8 +243,23 @@ export const FormsManagementView: React.FC = () => {
     setFormDesc(form.description || '');
     setFormType(form.form_type);
     setIsMandatory(form.is_mandatory);
-    setTargetAudience(form.target_audience);
+    
+    if (form.target_audience === 'selected' || form.target_audience === 'students' || form.target_audience === 'floors') {
+      if (Array.isArray(form.target_student_ids) && form.target_student_ids.length > 0) {
+        setTargetAudience('students');
+      } else if (Array.isArray(form.target_floors) && form.target_floors.length > 0) {
+        setTargetAudience('floors');
+      } else {
+        setTargetAudience(form.target_audience || 'selected');
+      }
+    } else {
+      setTargetAudience(form.target_audience || 'all');
+    }
+
     setTargetFloors((form.target_floors || []).map(String));
+    setTargetStudentIds((form.target_student_ids || []).map(Number));
+    setStudentSearchText('');
+    setStudentFloorFilter('all');
     
     try {
       setStartTime(new Date(form.start_time).toISOString().slice(0, 16));
@@ -180,6 +271,9 @@ export const FormsManagementView: React.FC = () => {
 
     setFields(form.fields || []);
     setModalOpen(true);
+    if (availableStudents.length === 0) {
+      fetchStudents();
+    }
   };
 
   const handleAddField = () => {
@@ -245,6 +339,16 @@ export const FormsManagementView: React.FC = () => {
       return;
     }
 
+    if (targetAudience === 'students' && targetStudentIds.length === 0) {
+      alert('Please search and select at least one student for "Specific Students" audience.');
+      return;
+    }
+
+    if (targetAudience === 'floors' && targetFloors.length === 0) {
+      alert('Please select at least one floor for "Selected Floors" audience.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -252,8 +356,9 @@ export const FormsManagementView: React.FC = () => {
         description: formDesc.trim(),
         form_type: formType,
         fields: fields,
-        target_audience: targetAudience,
-        target_floors: targetAudience === 'selected' ? targetFloors : null,
+        target_audience: targetAudience === 'floors' ? 'selected' : targetAudience,
+        target_floors: (targetAudience === 'floors' || targetAudience === 'selected') ? targetFloors : null,
+        target_student_ids: (targetAudience === 'students' || targetAudience === 'selected') ? targetStudentIds : null,
         start_time: startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
         end_time: endTime ? new Date(endTime).toISOString() : new Date().toISOString(),
         is_mandatory: isMandatory,
@@ -448,7 +553,17 @@ export const FormsManagementView: React.FC = () => {
                   </div>
 
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>
-                    {form.target_audience === 'all' ? 'All Students' : form.target_audience === 'current' ? 'Current Only' : form.target_audience === 'alumni' ? 'Alumni' : 'Selected'}
+                    {form.target_audience === 'all' 
+                      ? 'All Students' 
+                      : form.target_audience === 'current' 
+                      ? 'Current Only' 
+                      : form.target_audience === 'alumni' 
+                      ? 'Alumni' 
+                      : (form.target_audience === 'students' || (Array.isArray(form.target_student_ids) && form.target_student_ids.length > 0))
+                      ? `${form.target_student_ids?.length || 0} Specific Students`
+                      : (form.target_audience === 'floors' || (Array.isArray(form.target_floors) && form.target_floors.length > 0))
+                      ? `Floors: ${(form.target_floors || []).join(', ')}`
+                      : 'Selected'}
                   </span>
                 </div>
 
@@ -619,21 +734,22 @@ export const FormsManagementView: React.FC = () => {
                 {/* Target Audience */}
                 <div className="form-group">
                   <label className="form-label">Target Audience</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '8px' }}>
                     {[
                       { id: 'all', label: 'All Students' },
                       { id: 'current', label: 'Current Only' },
                       { id: 'alumni', label: 'Alumni Only' },
-                      { id: 'selected', label: 'Selected Floors' }
+                      { id: 'floors', label: 'Selected Floors' },
+                      { id: 'students', label: 'Specific Students' }
                     ].map(aud => (
                       <label key={aud.id} style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px',
-                        padding: '8px 12px',
+                        padding: '8px 10px',
                         borderRadius: '10px',
-                        border: targetAudience === aud.id ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                        background: targetAudience === aud.id ? '#eff6ff' : '#ffffff',
+                        border: (targetAudience === aud.id || (aud.id === 'floors' && targetAudience === 'selected' && targetFloors.length > 0)) ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                        background: (targetAudience === aud.id || (aud.id === 'floors' && targetAudience === 'selected' && targetFloors.length > 0)) ? '#eff6ff' : '#ffffff',
                         cursor: 'pointer',
                         fontWeight: 700,
                         fontSize: '0.82rem'
@@ -641,7 +757,7 @@ export const FormsManagementView: React.FC = () => {
                         <input 
                           type="radio" 
                           name="target_audience"
-                          checked={targetAudience === aud.id}
+                          checked={targetAudience === aud.id || (aud.id === 'floors' && targetAudience === 'selected' && targetFloors.length > 0)}
                           onChange={() => setTargetAudience(aud.id as any)}
                         />
                         <span>{aud.label}</span>
@@ -649,41 +765,211 @@ export const FormsManagementView: React.FC = () => {
                     ))}
                   </div>
 
-                  {targetAudience === 'selected' && (
-                    <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px', color: '#475569' }}>
-                        Select Floors:
+                  {/* Selected Floors Picker */}
+                  {(targetAudience === 'floors' || (targetAudience === 'selected' && targetFloors.length > 0)) && (
+                    <div style={{ marginTop: '0.75rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                          Select Floors ({targetFloors.length} Selected):
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setTargetFloors(availableFloors.map(fl => String(fl.floor_id !== undefined ? fl.floor_id : fl.id)))}
+                            style={{ fontSize: '0.75rem', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+                          >
+                            Select All
+                          </button>
+                          <span style={{ color: '#cbd5e1' }}>|</span>
+                          <button
+                            type="button"
+                            onClick={() => setTargetFloors([])}
+                            style={{ fontSize: '0.75rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            Clear
+                          </button>
+                        </div>
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                         {availableFloors.map(fl => {
-                          const isSelected = targetFloors.includes(String(fl.id));
+                          const floorId = String(fl.floor_id !== undefined ? fl.floor_id : fl.id);
+                          const isSelected = targetFloors.includes(floorId);
+                          const floorLabel = fl.name || (fl.floor_name ? fl.floor_name : `Floor ${floorId}`);
                           return (
                             <button
-                              key={fl.id}
+                              key={floorId}
                               type="button"
                               onClick={() => {
                                 if (isSelected) {
-                                  setTargetFloors(targetFloors.filter(f => f !== String(fl.id)));
+                                  setTargetFloors(targetFloors.filter(f => f !== floorId));
                                 } else {
-                                  setTargetFloors([...targetFloors, String(fl.id)]);
+                                  setTargetFloors([...targetFloors, floorId]);
                                 }
                               }}
                               style={{
-                                padding: '4px 10px',
+                                padding: '6px 14px',
                                 borderRadius: '8px',
-                                fontSize: '0.78rem',
+                                fontSize: '0.82rem',
                                 fontWeight: 700,
                                 border: isSelected ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
                                 background: isSelected ? '#2563eb' : '#ffffff',
-                                color: isSelected ? '#ffffff' : '#475569',
-                                cursor: 'pointer'
+                                color: isSelected ? '#ffffff' : '#334155',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
                               }}
                             >
-                              Floor {fl.floor_number || fl.id}
+                              {floorLabel}
                             </button>
                           );
                         })}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Specific Students Manual Search & Picker */}
+                  {targetAudience === 'students' && (
+                    <div className="target-students-picker-box">
+                      <div className="target-students-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Users size={16} color="#2563eb" />
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b' }}>
+                            Select Students ({targetStudentIds.length} Selected)
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {filteredAudienceStudents.length > 0 && (
+                            <button
+                              type="button"
+                              className="student-quick-action-btn"
+                              onClick={handleSelectAllFilteredStudents}
+                            >
+                              Select All Filtered ({filteredAudienceStudents.length})
+                            </button>
+                          )}
+                          {targetStudentIds.length > 0 && (
+                            <button
+                              type="button"
+                              className="student-quick-action-btn text-danger"
+                              onClick={() => setTargetStudentIds([])}
+                            >
+                              Clear Selected
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Search & Floor filter row */}
+                      <div className="target-students-filter-row">
+                        <div className="student-search-input-wrap">
+                          <Search size={14} color="#94a3b8" />
+                          <input 
+                            type="text"
+                            placeholder="Search by ID, Code, Name, or Room..."
+                            value={studentSearchText}
+                            onChange={e => setStudentSearchText(e.target.value)}
+                          />
+                          {studentSearchText && (
+                            <button type="button" onClick={() => setStudentSearchText('')} className="search-clear-btn">
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+
+                        <select
+                          className="form-select student-floor-dropdown"
+                          value={studentFloorFilter}
+                          onChange={e => setStudentFloorFilter(e.target.value)}
+                        >
+                          <option value="all">All Floors</option>
+                          {availableFloors.map(fl => {
+                            const fid = String(fl.floor_id !== undefined ? fl.floor_id : fl.id);
+                            const fName = fl.name || `Floor ${fid}`;
+                            return <option key={fid} value={fid}>{fName}</option>;
+                          })}
+                        </select>
+                      </div>
+
+                      {/* Selected Students Chips Container */}
+                      {selectedStudentsList.length > 0 && (
+                        <div className="selected-chips-container">
+                          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', marginBottom: '4px', textTransform: 'uppercase' }}>
+                            Selected Students ({selectedStudentsList.length}):
+                          </div>
+                          <div className="selected-chips-scroll">
+                            {selectedStudentsList.map(st => {
+                              const sid = Number(st.student_id ?? st.id);
+                              return (
+                                <span key={sid} className="selected-student-chip">
+                                  <span className="chip-name">{st.name || `Student ${sid}`}</span>
+                                  <span className="chip-meta">
+                                    {st.student_code ? `#${st.student_code}` : `ID:${sid}`}
+                                    {st.room_number ? ` (R-${st.room_number})` : ''}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="chip-remove-btn"
+                                    onClick={() => handleToggleStudent(sid)}
+                                    title="Remove"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Student list / table with checkboxes */}
+                      {studentsLoading ? (
+                        <div style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b', fontSize: '0.85rem' }}>
+                          Loading students directory...
+                        </div>
+                      ) : filteredAudienceStudents.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                          No students matched "{studentSearchText}"
+                        </div>
+                      ) : (
+                        <div className="student-selection-scroll-list">
+                          {filteredAudienceStudents.slice(0, 100).map(st => {
+                            const sid = Number(st.student_id ?? st.id);
+                            const isSelected = targetStudentIds.includes(sid);
+                            return (
+                              <div
+                                key={sid}
+                                className={`student-select-row ${isSelected ? 'selected' : ''}`}
+                                onClick={() => handleToggleStudent(sid)}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}} // handled by row click
+                                  style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                                />
+                                <div className="student-row-id-badge">
+                                  {st.student_code ? `${st.student_code}` : `ID:${sid}`}
+                                </div>
+                                <div className="student-row-info">
+                                  <span className="student-row-name">{st.name}</span>
+                                  <span className="student-row-sub">
+                                    {st.room_number ? `Room: ${st.room_number}` : 'No Room'}
+                                    {st.floor_id !== undefined && st.floor_id !== null ? ` • Floor ${st.floor_id}` : ''}
+                                    {st.phone_number ? ` • ${st.phone_number}` : ''}
+                                  </span>
+                                </div>
+                                {isSelected && (
+                                  <CheckCircle2 size={16} color="#2563eb" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                                )}
+                              </div>
+                            );
+                          })}
+                          {filteredAudienceStudents.length > 100 && (
+                            <div style={{ textAlign: 'center', padding: '8px', fontSize: '0.75rem', color: '#64748b', background: '#f8fafc' }}>
+                              Showing first 100 of {filteredAudienceStudents.length} students. Use search above to narrow down.
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
