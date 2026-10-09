@@ -50,7 +50,7 @@ export const StudentsManagementView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFloor, setSelectedFloor] = useState<string>('All');
-  const [assignmentFilter, setAssignmentFilter] = useState<string>('All');
+  const [assignmentFilter, setAssignmentFilter] = useState<string>('Active');
   const [defaultFilter, setDefaultFilter] = useState<string>('All');
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<string>('name-asc');
@@ -127,7 +127,7 @@ export const StudentsManagementView: React.FC = () => {
     if (isInitial) setLoading(true);
     try {
       const [studentsRes, floorsRes, tagsRes, sessionsRes] = await Promise.all([
-        apiClient.get('/students'),
+        apiClient.get('/students?status=all'),
         apiClient.get('/floors'),
         apiClient.get('/tags').catch(() => ({ data: { success: true, data: [] } })),
         apiClient.get('/admin/sessions').catch(() => ({ data: { success: true, data: [] } }))
@@ -596,11 +596,14 @@ export const StudentsManagementView: React.FC = () => {
   const filteredStudents = students.filter(s => {
     const nameMatch = (s.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const idMatch = String(s.student_code || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const isAssigned = s.floor_id != null && s.floor_id !== '';
+    const isAssigned = s.floor_id != null && s.floor_id !== '' && Number(s.floor_id) > 0;
+    const isAlumni = s.is_active === 0 || s.is_active === false || s.is_active === '0';
     
     let assignMatch = true;
-    if (assignmentFilter === 'Assigned') assignMatch = isAssigned;
-    if (assignmentFilter === 'Unassigned') assignMatch = !isAssigned;
+    if (assignmentFilter === 'Active') assignMatch = !isAlumni;
+    else if (assignmentFilter === 'Alumni') assignMatch = isAlumni;
+    else if (assignmentFilter === 'Assigned') assignMatch = isAssigned && !isAlumni;
+    else if (assignmentFilter === 'Unassigned') assignMatch = !isAssigned && !isAlumni;
 
     let floorMatch = true;
     if (selectedFloor !== 'All') {
@@ -892,6 +895,72 @@ export const StudentsManagementView: React.FC = () => {
         </div>
       </div>
 
+      {/* Quick Status Pill Filters */}
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setAssignmentFilter('Active')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '24px',
+            border: assignmentFilter === 'Active' ? '2px solid #4f46e5' : '1px solid #cbd5e1',
+            backgroundColor: assignmentFilter === 'Active' ? '#eef2ff' : '#ffffff',
+            color: assignmentFilter === 'Active' ? '#4338ca' : '#475569',
+            fontWeight: 700,
+            fontSize: '13px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: assignmentFilter === 'Active' ? '0 2px 8px rgba(79, 70, 229, 0.18)' : 'none',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <span>🏠</span> Active Students ({students.filter(s => s.is_active !== 0 && s.is_active !== false && s.is_active !== '0').length})
+        </button>
+
+        <button
+          onClick={() => setAssignmentFilter('Alumni')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '24px',
+            border: assignmentFilter === 'Alumni' ? '2px solid #8b5cf6' : '1px solid #cbd5e1',
+            backgroundColor: assignmentFilter === 'Alumni' ? '#f5f3ff' : '#ffffff',
+            color: assignmentFilter === 'Alumni' ? '#6d28d9' : '#475569',
+            fontWeight: 700,
+            fontSize: '13px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: assignmentFilter === 'Alumni' ? '0 2px 8px rgba(139, 92, 246, 0.18)' : 'none',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <span>🎓</span> Alumni / Inactive ({students.filter(s => s.is_active === 0 || s.is_active === false || s.is_active === '0').length})
+        </button>
+
+        <button
+          onClick={() => setAssignmentFilter('All')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '24px',
+            border: assignmentFilter === 'All' ? '2px solid #0f172a' : '1px solid #cbd5e1',
+            backgroundColor: assignmentFilter === 'All' ? '#f8fafc' : '#ffffff',
+            color: assignmentFilter === 'All' ? '#0f172a' : '#475569',
+            fontWeight: 700,
+            fontSize: '13px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: assignmentFilter === 'All' ? '0 2px 8px rgba(15, 23, 42, 0.12)' : 'none',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <span>👥</span> All Records ({students.length})
+        </button>
+      </div>
+
       {/* Filter Row */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
         <div style={{ position: 'relative', width: '300px' }}>
@@ -915,9 +984,11 @@ export const StudentsManagementView: React.FC = () => {
             </select>
 
             <select value={assignmentFilter} onChange={e => setAssignmentFilter(e.target.value)}>
-              <option value="All">All Students</option>
-              <option value="Assigned">Assigned Only</option>
-              <option value="Unassigned">Unassigned Only</option>
+              <option value="Active">Active Students (Allocated Rooms)</option>
+              <option value="Alumni">Alumni / Inactive Students</option>
+              <option value="All">All Students (Active + Alumni)</option>
+              <option value="Assigned">Assigned Floor Only</option>
+              <option value="Unassigned">Unassigned Floor Only</option>
             </select>
 
             <select value={defaultFilter} onChange={e => setDefaultFilter(e.target.value)}>
@@ -983,19 +1054,36 @@ export const StudentsManagementView: React.FC = () => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <span style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      padding: '4px 10px',
-                      borderRadius: '12px',
-                      backgroundColor: isAssigned ? '#ecfdf5' : '#fef2f2',
-                      color: isAssigned ? '#166534' : '#991b1b',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}>
-                      {isAssigned ? `Floor ${student.floor_id}` : 'Unassigned'}
-                    </span>
+                    {student.is_active === 0 || student.is_active === false || student.is_active === '0' ? (
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        backgroundColor: '#f5f3ff',
+                        color: '#7c3aed',
+                        border: '1px solid #ddd6fe',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}>
+                        🎓 Alumni
+                      </span>
+                    ) : (
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        backgroundColor: isAssigned ? '#ecfdf5' : '#fef2f2',
+                        color: isAssigned ? '#166534' : '#991b1b',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}>
+                        {isAssigned ? `Floor ${student.floor_id}` : 'Unassigned'}
+                      </span>
+                    )}
                     {student.is_default_present ? (
                       <span style={{
                         fontSize: '10px',
