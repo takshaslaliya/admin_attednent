@@ -60,6 +60,60 @@ interface FormItem {
   created_at: string;
 }
 
+export const formatLocalDateForInput = (d: Date): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+export const toDateTimeLocalInput = (dateVal: any): string => {
+  if (!dateVal) return '';
+  const str = String(dateVal).trim();
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(str) && !str.endsWith('Z')) {
+    return str.slice(0, 16).replace(' ', 'T');
+  }
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  return formatLocalDateForInput(d);
+};
+
+export const formatDisplayDateTime = (val: any): string => {
+  if (!val) return '';
+  const str = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(str) && !str.endsWith('Z')) {
+    const [datePart, timePart] = str.replace('T', ' ').split(' ');
+    const [y, m, d] = datePart.split('-').map(Number);
+    const [h, min] = timePart.split(':').map(Number);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthName = months[m - 1] || '';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    const minStr = String(min).padStart(2, '0');
+    return `${monthName} ${d}, ${String(h12).padStart(2, '0')}:${minStr} ${ampm}`;
+  }
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return String(val);
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
+export const toDbDateTime = (val: string): string => {
+  if (!val) return '';
+  const clean = val.replace('T', ' ').trim();
+  if (clean.length === 16) {
+    return clean + ':00';
+  }
+  return clean;
+};
+
 export const FormsManagementView: React.FC = () => {
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -214,8 +268,8 @@ export const FormsManagementView: React.FC = () => {
     const future = new Date();
     future.setDate(future.getDate() + 3);
     
-    setStartTime(now.toISOString().slice(0, 16));
-    setEndTime(future.toISOString().slice(0, 16));
+    setStartTime(formatLocalDateForInput(now));
+    setEndTime(formatLocalDateForInput(future));
     
     setFields([
       {
@@ -256,13 +310,8 @@ export const FormsManagementView: React.FC = () => {
     setStudentSearchText('');
     setStudentFloorFilter('all');
     
-    try {
-      setStartTime(new Date(form.start_time).toISOString().slice(0, 16));
-      setEndTime(new Date(form.end_time).toISOString().slice(0, 16));
-    } catch (e) {
-      setStartTime('');
-      setEndTime('');
-    }
+    setStartTime(toDateTimeLocalInput(form.start_time));
+    setEndTime(toDateTimeLocalInput(form.end_time));
 
     setFields(form.fields || []);
     setModalOpen(true);
@@ -354,8 +403,8 @@ export const FormsManagementView: React.FC = () => {
         target_audience: targetAudience === 'floors' ? 'selected' : targetAudience,
         target_floors: (targetAudience === 'floors' || targetAudience === 'selected') ? targetFloors : null,
         target_student_ids: (targetAudience === 'students' || targetAudience === 'selected') ? targetStudentIds : null,
-        start_time: startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
-        end_time: endTime ? new Date(endTime).toISOString() : new Date().toISOString(),
+        start_time: startTime ? toDbDateTime(startTime) : toDbDateTime(formatLocalDateForInput(new Date())),
+        end_time: endTime ? toDbDateTime(endTime) : toDbDateTime(formatLocalDateForInput(new Date())),
         is_mandatory: isMandatory,
         is_active: true
       };
@@ -526,9 +575,9 @@ export const FormsManagementView: React.FC = () => {
                 <div className="form-card-timing">
                   <Clock size={13} color="#64748b" />
                   <span>
-                    {new Date(form.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {formatDisplayDateTime(form.start_time)}
                     {' – '}
-                    {new Date(form.end_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {formatDisplayDateTime(form.end_time)}
                   </span>
                 </div>
 

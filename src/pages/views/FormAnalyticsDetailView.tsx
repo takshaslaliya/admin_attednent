@@ -20,6 +20,7 @@ import {
   X
 } from 'lucide-react';
 import apiClient from '../../services/apiClient';
+import { formatDisplayDateTime } from './FormsManagementView';
 import './FormAnalyticsDetailView.css';
 
 export const FormAnalyticsDetailView: React.FC = () => {
@@ -215,9 +216,9 @@ export const FormAnalyticsDetailView: React.FC = () => {
             <div className="report-timing-info">
               <Clock size={13} />
               <span>
-                <b>Start:</b> {new Date(form.start_time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                <b>Start:</b> {formatDisplayDateTime(form.start_time)}
                 {' · '}
-                <b>Deadline:</b> {new Date(form.end_time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                <b>Deadline:</b> {formatDisplayDateTime(form.end_time)}
               </span>
             </div>
           </div>
