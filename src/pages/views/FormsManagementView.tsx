@@ -62,7 +62,7 @@ interface FormItem {
 
 export const FormsManagementView: React.FC = () => {
   const navigate = useNavigate();
-  const { showConfirm } = useConfirm();
+  const confirm = useConfirm();
   const [forms, setForms] = useState<FormItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -394,26 +394,28 @@ export const FormsManagementView: React.FC = () => {
     }
   };
 
-  const handleDeleteForm = (form: FormItem) => {
-    showConfirm({
+  const handleDeleteForm = async (form: FormItem) => {
+    const confirmed = await confirm({
       title: 'Delete Form & Responses?',
       message: `Are you sure you want to delete "${form.title}"? All submitted student responses and view logs will be permanently deleted.`,
       confirmText: 'Delete Permanently',
-      confirmVariant: 'danger',
-      onConfirm: async () => {
-        try {
-          await apiClient.post(`/forms/${form.id}/delete`, {});
-          setForms(prev => prev.filter(f => f.id !== form.id));
-        } catch (e: any) {
-          try {
-            await apiClient.delete(`/forms/${form.id}`);
-            setForms(prev => prev.filter(f => f.id !== form.id));
-          } catch (delErr: any) {
-            alert(delErr.response?.data?.message || 'Failed to delete form');
-          }
-        }
-      }
+      type: 'danger',
+      icon: 'trash'
     });
+
+    if (!confirmed) return;
+
+    try {
+      await apiClient.post(`/forms/${form.id}/delete`, {});
+      setForms(prev => prev.filter(f => f.id !== form.id));
+    } catch (e: any) {
+      try {
+        await apiClient.delete(`/forms/${form.id}`);
+        setForms(prev => prev.filter(f => f.id !== form.id));
+      } catch (delErr: any) {
+        alert(delErr.response?.data?.message || 'Failed to delete form');
+      }
+    }
   };
 
   const handleOpenAnalytics = (form: FormItem) => {
