@@ -562,7 +562,7 @@ export const DashboardOverview: React.FC = () => {
             </div>
           </div>
           <div style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: 600, marginTop: '10px' }}>
-            Approved leave today
+            In {currentSessionName} (Approved)
           </div>
         </HamsCard>
 
