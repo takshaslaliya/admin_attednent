@@ -641,7 +641,15 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     try {
       const res = await apiClient.get(`/attendance/session/${sessionKey}/students?date=${attendanceDate}`);
       if (res.data.success) {
-        setAttendanceStudents(res.data.data);
+        const rawList = res.data.data || [];
+        const seen = new Set();
+        const uniqueList = rawList.filter((s: any) => {
+          const key = s.student_id || s.student_code;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setAttendanceStudents(uniqueList);
       }
     } catch (e) {
       console.error(e);
@@ -652,7 +660,15 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     try {
       const res = await apiClient.get(`/attendance/session/${sessionKey}/absent-reasons?date=${absentDate}`);
       if (res.data.success) {
-        setAbsentStudents(res.data.data);
+        const rawList = res.data.data || [];
+        const seen = new Set();
+        const uniqueList = rawList.filter((s: any) => {
+          const key = s.student_id || s.student_code;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setAbsentStudents(uniqueList);
       }
     } catch (e) {
       console.error(e);
@@ -1705,7 +1721,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             </thead>
             <tbody>
               {filteredAttendance.map(s => (
-                <tr key={s.student_code} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <tr key={`att_${s.student_id || s.student_code}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '12px 14px', fontWeight: 700, color: '#3b82f6' }}>{s.student_code}</td>
                   <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0f172a' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -1874,7 +1890,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             </thead>
             <tbody>
               {filteredAbsent.map(s => (
-                <tr key={s.student_code} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <tr key={`abs_${s.student_id || s.student_code}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '12px 14px', fontWeight: 700, color: '#3b82f6' }}>{s.student_code}</td>
                   <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0f172a' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
