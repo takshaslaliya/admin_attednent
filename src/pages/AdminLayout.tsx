@@ -5,6 +5,7 @@ import { AdminSidebar } from '../components/AdminSidebar';
 import { AdminHeader } from '../components/AdminHeader';
 import { DashboardOverview } from './views/DashboardOverview';
 import { AttendanceReportsView } from './views/AttendanceReportsView';
+import { OneDayAttendanceView } from './views/OneDayAttendanceView';
 import { StudentsManagementView } from './views/StudentsManagementView';
 import { LeadersManagementView } from './views/LeadersManagementView';
 import { WhatsAppMessagingView } from './views/WhatsAppMessagingView';
@@ -65,6 +66,9 @@ export const AdminLayout: React.FC = () => {
     }
     if (p === '/attendance' || p === '/attendance-reports') {
       return { title: 'Attendance Reports', subtitle: 'Detailed 6-month reports, student analytics & parent notifications' };
+    }
+    if (p === '/one-day-attendance') {
+      return { title: 'One-Day Attendance', subtitle: 'On-demand session creation, student marking windows & individual reports' };
     }
     if (p === '/students') {
       return { title: 'Student Management', subtitle: 'Manage active students, floor & room assignments' };
@@ -131,6 +135,7 @@ export const AdminLayout: React.FC = () => {
             <Route path="/dashboard" element={<DashboardOverview />} />
             <Route path="/attendance" element={<AttendanceReportsView />} />
             <Route path="/attendance-reports" element={<AttendanceReportsView />} />
+            <Route path="/one-day-attendance" element={<OneDayAttendanceView />} />
             <Route path="/students" element={<StudentsManagementView />} />
             <Route path="/leaders" element={!isLeader ? <LeadersManagementView /> : <Navigate to="/" replace />} />
             <Route path="/session-viewers" element={!isLeader ? <SessionViewerCredentialsView /> : <Navigate to="/" replace />} />

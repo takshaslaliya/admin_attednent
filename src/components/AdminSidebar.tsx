@@ -5,6 +5,7 @@ import {
   CalendarClock, 
   PlusCircle, 
   FileSpreadsheet, 
+  CalendarCheck,
   Users, 
   MessageSquare, 
   LogOut, 
@@ -89,8 +90,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   // Route matches
   const isDashboard = pathname === '/' || pathname === '/dashboard';
   const isAttendance = pathname === '/attendance' || pathname === '/attendance-reports';
+  const isOneDayAttendance = pathname === '/one-day-attendance';
   const isLeaves = pathname === '/leaves';
-  const isAttendanceActive = isAttendance || isLeaves;
+  const isAttendanceActive = isAttendance || isOneDayAttendance || isLeaves;
 
   const isStudents = pathname === '/students';
   const isLeaders = pathname === '/leaders';
@@ -201,6 +203,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 <span className="subitem-bullet"></span>
                 <FileSpreadsheet size={15} className="subitem-icon" />
                 <span>Attendance Reports</span>
+              </button>
+
+              <button
+                className={`nav-subitem-btn ${isOneDayAttendance ? 'active' : ''}`}
+                onClick={() => handleNavClick('/one-day-attendance')}
+              >
+                <span className="subitem-bullet"></span>
+                <CalendarCheck size={15} className="subitem-icon" style={{ color: '#0d9488' }} />
+                <span>One-Day Attendance</span>
               </button>
 
               {canShowLeaves && (
