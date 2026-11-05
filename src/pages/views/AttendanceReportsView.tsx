@@ -1,25 +1,25 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Users, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  TrendingUp, 
-  Calendar, 
-  Search, 
-  Filter, 
-  Download, 
-  Send, 
-  Eye, 
-  Check, 
-  AlertCircle, 
-  RefreshCw, 
-  ShieldCheck, 
-  Sparkles, 
-  X, 
-  Phone, 
-  Home, 
+import {
+  Users,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  TrendingUp,
+  Calendar,
+  Search,
+  Filter,
+  Download,
+  Send,
+  Eye,
+  Check,
+  AlertCircle,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  X,
+  Phone,
+  Home,
   ArrowUpDown,
   History,
   FileSpreadsheet,
@@ -32,20 +32,20 @@ import {
   ChevronRight,
   Tag
 } from 'lucide-react';
-import { 
-  AreaChart, 
-  Area, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  ResponsiveContainer, 
-  CartesianGrid, 
-  Legend, 
-  PieChart, 
-  Pie, 
-  Cell 
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import apiClient from '../../services/apiClient';
 import { HamsCard } from '../../components/HamsCard';
@@ -627,10 +627,10 @@ export const AttendanceReportsView: React.FC = () => {
 
   const punctualityData = summary
     ? [
-        { name: 'On-Time', value: summary.punctuality_breakdown.on_time },
-        { name: 'Late', value: summary.punctuality_breakdown.late },
-        { name: 'Absent', value: summary.punctuality_breakdown.absent },
-      ]
+      { name: 'On-Time', value: summary.punctuality_breakdown.on_time },
+      { name: 'Late', value: summary.punctuality_breakdown.late },
+      { name: 'Absent', value: summary.punctuality_breakdown.absent },
+    ]
     : [];
 
   const selectedStudentsList = useMemo(() => {
