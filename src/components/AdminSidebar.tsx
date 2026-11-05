@@ -21,6 +21,7 @@ import {
   Send,
   ClipboardList,
   Vote,
+  RotateCcw,
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -104,6 +105,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const isWhatsAppActive = isMessages || isTemplates;
 
   const isForms = pathname === '/forms' || pathname === '/polls';
+  const isRecycleBin = pathname === '/recycle-bin' || pathname === '/data-recovery';
 
   const isStrings = pathname === '/strings' || pathname === '/floor-strings' || pathname === '/generate-string';
   const isSecurity = pathname === '/security';
@@ -377,6 +379,17 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             <ClipboardList size={18} className="nav-icon" style={{ color: '#0ea5e9' }} />
             <span>Forms & Polls</span>
           </button>
+
+          {/* Recycle Bin & Data Recovery */}
+          {!isLeader && (
+            <button
+              className={`nav-item-btn ${isRecycleBin ? 'active' : ''}`}
+              onClick={() => handleNavClick('/recycle-bin')}
+            >
+              <RotateCcw size={18} className="nav-icon" style={{ color: '#059669' }} />
+              <span>Recycle Bin & Recovery</span>
+            </button>
+          )}
 
           {/* 6. Live Sessions Category (Collapsible Sub-menu) */}
           {visibleSessions.length > 0 && (

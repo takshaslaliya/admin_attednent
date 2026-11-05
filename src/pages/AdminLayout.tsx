@@ -18,6 +18,7 @@ import { WhatsAppTemplatesView } from './views/WhatsAppTemplatesView';
 import { SessionViewerCredentialsView } from './views/SessionViewerCredentialsView';
 import { FormsManagementView } from './views/FormsManagementView';
 import { FormAnalyticsDetailView } from './views/FormAnalyticsDetailView';
+import { RecycleBinView } from './views/RecycleBinView';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -94,6 +95,9 @@ export const AdminLayout: React.FC = () => {
     if (p === '/forms' || p === '/polls') {
       return { title: 'Forms & Polls Management', subtitle: 'Create surveys, polls, view response analytics and track student engagement' };
     }
+    if (p === '/recycle-bin' || p === '/data-recovery') {
+      return { title: 'Recycle Bin & Data Recovery', subtitle: '48-hour temporary recovery system & centralized database audit' };
+    }
     if (p === '/security') {
       return { title: 'Proxy & Multi-Account Security Audit', subtitle: 'Detect and resolve cross-student logins from same IP / Device' };
     }
@@ -149,6 +153,8 @@ export const AdminLayout: React.FC = () => {
             <Route path="/polls" element={<FormsManagementView />} />
             <Route path="/forms/:formId/analytics" element={<FormAnalyticsDetailView />} />
             <Route path="/forms/:formId/report" element={<FormAnalyticsDetailView />} />
+            <Route path="/recycle-bin" element={!isLeader ? <RecycleBinView /> : <Navigate to="/" replace />} />
+            <Route path="/data-recovery" element={!isLeader ? <RecycleBinView /> : <Navigate to="/" replace />} />
             <Route path="/leaves" element={<LeavesManagementView />} />
             <Route path="/security" element={<DeviceSecurityView />} />
             <Route path="/session_add" element={!isLeader ? <CreateSessionView onAdded={() => { fetchSessions(); navigate('/'); }} /> : <Navigate to="/" replace />} />
