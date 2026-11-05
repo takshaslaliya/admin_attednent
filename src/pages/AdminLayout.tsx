@@ -63,8 +63,8 @@ export const AdminLayout: React.FC = () => {
     if (p === '/' || p === '/dashboard') {
       return { title: 'Dashboard Overview', subtitle: "Live attendance statistics & hostel operations" };
     }
-    if (p === '/attendance') {
-      return { title: 'Attendance Records', subtitle: 'Detailed reports, filters, and CSV export' };
+    if (p === '/attendance' || p === '/attendance-reports') {
+      return { title: 'Attendance Reports', subtitle: 'Detailed 6-month reports, student analytics & parent notifications' };
     }
     if (p === '/students') {
       return { title: 'Student Management', subtitle: 'Manage active students, floor & room assignments' };
@@ -130,6 +130,7 @@ export const AdminLayout: React.FC = () => {
             <Route path="/" element={<DashboardOverview />} />
             <Route path="/dashboard" element={<DashboardOverview />} />
             <Route path="/attendance" element={<AttendanceReportsView />} />
+            <Route path="/attendance-reports" element={<AttendanceReportsView />} />
             <Route path="/students" element={<StudentsManagementView />} />
             <Route path="/leaders" element={!isLeader ? <LeadersManagementView /> : <Navigate to="/" replace />} />
             <Route path="/session-viewers" element={!isLeader ? <SessionViewerCredentialsView /> : <Navigate to="/" replace />} />

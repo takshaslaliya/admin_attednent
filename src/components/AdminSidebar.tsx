@@ -88,7 +88,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
   // Route matches
   const isDashboard = pathname === '/' || pathname === '/dashboard';
-  const isAttendance = pathname === '/attendance';
+  const isAttendance = pathname === '/attendance' || pathname === '/attendance-reports';
   const isLeaves = pathname === '/leaves';
   const isAttendanceActive = isAttendance || isLeaves;
 
@@ -200,7 +200,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               >
                 <span className="subitem-bullet"></span>
                 <FileSpreadsheet size={15} className="subitem-icon" />
-                <span>Attendance Records</span>
+                <span>Attendance Reports</span>
               </button>
 
               {canShowLeaves && (

@@ -715,6 +715,40 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     }
   };
 
+  // Delete / Remove Single Student Attendance Record
+  const handleDeleteSingleStudent = async (student: any) => {
+    if (!student) return;
+    const isConfirmed = await confirm({
+      title: 'Remove Student Attendance',
+      message: `Are you sure you want to remove attendance for "${student.name || student.student_code}" in "${sessionName || sessionKey}" on ${attendanceDate}?`,
+      warningNote: 'This student will revert to Absent status for this session.',
+      confirmText: 'Yes, Remove Record',
+      type: 'danger',
+      icon: 'trash'
+    });
+    if (!isConfirmed) return;
+
+    setSubmittingAction(true);
+    try {
+      const stuCode = student.student_code || '';
+      const stuId = student.student_id || student.id || '';
+      const res = await apiClient.delete(
+        `/attendance/session/${sessionKey}/records?date=${attendanceDate}&student_code=${encodeURIComponent(stuCode)}&student_id=${encodeURIComponent(stuId)}`
+      );
+      if (res.data.success) {
+        setManualModal(null);
+        fetchAttendanceList();
+        if (activeTab === 2) fetchAbsentList();
+      } else {
+        alert(res.data.message || 'Failed to remove attendance record.');
+      }
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Failed to remove attendance record.');
+    } finally {
+      setSubmittingAction(false);
+    }
+  };
+
   // Open Justify Modal
   const openJustifyModal = (student: any) => {
     setJustifyModal({
@@ -1793,25 +1827,50 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                   </td>
                   {!isViewOnly && (
                     <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                      <button
-                        onClick={() => openManualModal(s)}
-                        style={{
-                          padding: '6px 14px',
-                          backgroundColor: s.status === 'Absent' ? '#e0e7ff' : '#f1f5f9',
-                          color: s.status === 'Absent' ? '#4338ca' : '#334155',
-                          border: '1px solid ' + (s.status === 'Absent' ? '#c7d2fe' : '#cbd5e1'),
-                          borderRadius: '8px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        <UserCheck size={14} />
-                        {s.status === 'Absent' ? 'Mark Manual' : 'Edit Mark'}
-                      </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={() => openManualModal(s)}
+                          style={{
+                            padding: '6px 14px',
+                            backgroundColor: s.status === 'Absent' ? '#e0e7ff' : '#f1f5f9',
+                            color: s.status === 'Absent' ? '#4338ca' : '#334155',
+                            border: '1px solid ' + (s.status === 'Absent' ? '#c7d2fe' : '#cbd5e1'),
+                            borderRadius: '8px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <UserCheck size={14} />
+                          {s.status === 'Absent' ? 'Mark Manual' : 'Edit Mark'}
+                        </button>
+
+                        {(s.status === 'Present' || s.status === 'Late' || s.is_present) && (
+                          <button
+                            onClick={() => handleDeleteSingleStudent(s)}
+                            disabled={submittingAction}
+                            title="Remove Attendance Record"
+                            style={{
+                              padding: '6px 10px',
+                              backgroundColor: '#fef2f2',
+                              color: '#dc2626',
+                              border: '1px solid #fecaca',
+                              borderRadius: '8px',
+                              fontWeight: 700,
+                              cursor: submittingAction ? 'not-allowed' : 'pointer',
+                              fontSize: '12px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -2359,43 +2418,68 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setManualModal(null)}
-                style={{ 
-                  padding: '10px 18px', 
-                  background: '#f1f5f9', 
-                  border: '1px solid #cbd5e1', 
-                  borderRadius: '8px', 
-                  cursor: 'pointer', 
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  color: '#475569'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={submittingAction}
-                onClick={handleSaveManualAttendance}
-                style={{ 
-                  padding: '10px 20px', 
-                  background: manualModal.status === 'Late' ? '#d97706' : '#10b981', 
-                  color: '#ffffff', 
-                  border: 'none', 
-                  borderRadius: '8px', 
-                  cursor: submittingAction ? 'not-allowed' : 'pointer', 
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                {submittingAction ? 'Saving...' : `Mark as ${manualModal.status}`}
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+              {(manualModal.student.status === 'Present' || manualModal.student.status === 'Late' || manualModal.student.is_present) ? (
+                <button
+                  type="button"
+                  disabled={submittingAction}
+                  onClick={() => handleDeleteSingleStudent(manualModal.student)}
+                  style={{
+                    padding: '10px 16px',
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    cursor: submittingAction ? 'not-allowed' : 'pointer',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    color: '#dc2626',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Trash2 size={15} /> Remove Record
+                </button>
+              ) : <div />}
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setManualModal(null)}
+                  style={{ 
+                    padding: '10px 18px', 
+                    background: '#f1f5f9', 
+                    border: '1px solid #cbd5e1', 
+                    borderRadius: '8px', 
+                    cursor: 'pointer', 
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    color: '#475569'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={submittingAction}
+                  onClick={handleSaveManualAttendance}
+                  style={{ 
+                    padding: '10px 20px', 
+                    background: manualModal.status === 'Late' ? '#d97706' : '#10b981', 
+                    color: '#ffffff', 
+                    border: 'none', 
+                    borderRadius: '8px', 
+                    cursor: submittingAction ? 'not-allowed' : 'pointer', 
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {submittingAction ? 'Saving...' : `Mark as ${manualModal.status}`}
+                </button>
+              </div>
             </div>
           </div>
         </div>,
