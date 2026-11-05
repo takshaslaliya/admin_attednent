@@ -21,7 +21,7 @@ import {
   Send,
   ClipboardList,
   Vote,
-  X 
+  X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { renderSessionIcon } from '../utils/sessionIcons';
@@ -139,9 +139,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   return (
     <>
       {/* Mobile Backdrop Overlay */}
-      <div 
-        className={`sidebar-backdrop ${isOpen ? 'open' : ''}`} 
-        onClick={onCloseMobile} 
+      <div
+        className={`sidebar-backdrop ${isOpen ? 'open' : ''}`}
+        onClick={onCloseMobile}
         aria-hidden="true"
       />
 
@@ -155,46 +155,46 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             <h2>{isLeader ? 'Mentor Portal' : 'HAMS Portal'}</h2>
             <span>{isLeader ? 'Mentor Console' : 'Admin Control'}</span>
           </div>
-          <button 
-            className="sidebar-close-btn" 
-            onClick={onCloseMobile} 
+          <button
+            className="sidebar-close-btn"
+            onClick={onCloseMobile}
             title="Close navigation"
           >
             <X size={20} />
           </button>
         </div>
 
-      {/* Navigation List */}
-      <div className="sidebar-nav">
-        <div className="nav-section-title">Main Operations</div>
+        {/* Navigation List */}
+        <div className="sidebar-nav">
+          <div className="nav-section-title">Main Operations</div>
 
-        {/* 1. Dashboard Overview */}
-        <button
-          className={`nav-item-btn ${isDashboard ? 'active' : ''}`}
-          onClick={() => handleNavClick('/')}
-        >
-          <LayoutDashboard size={18} className="nav-icon" />
-          <span>Dashboard Overview</span>
-        </button>
-
-        {/* 2. Attendance Category (Collapsible Sub-menu) */}
-        <div className="nav-group">
+          {/* 1. Dashboard Overview */}
           <button
-            type="button"
-            className={`nav-item-btn nav-group-btn ${isAttendanceActive ? 'parent-active' : ''}`}
-            onClick={() => toggleSection('attendance')}
+            className={`nav-item-btn ${isDashboard ? 'active' : ''}`}
+            onClick={() => handleNavClick('/')}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <CalendarClock size={18} className="nav-icon" style={{ color: '#4f46e5' }} />
-              <span>Attendance</span>
-            </div>
-            <ChevronDown 
-              size={16} 
-              className={`nav-chevron ${openSections.attendance ? 'open' : ''}`} 
-            />
+            <LayoutDashboard size={18} className="nav-icon" />
+            <span>Dashboard Overview</span>
           </button>
 
-          {openSections.attendance && (
+          {/* 2. Attendance Category (Collapsible Sub-menu) */}
+          <div className="nav-group">
+            <button
+              type="button"
+              className={`nav-item-btn nav-group-btn ${isAttendanceActive ? 'parent-active' : ''}`}
+              onClick={() => toggleSection('attendance')}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <CalendarClock size={18} className="nav-icon" style={{ color: '#4f46e5' }} />
+                <span>Attendance</span>
+              </div>
+              <ChevronDown 
+                size={16} 
+                className={`nav-chevron ${openSections.attendance ? 'open' : ''}`} 
+              />
+            </button>
+
+            {openSections.attendance && (
             <div className="nav-submenu">
               <button
                 className={`nav-subitem-btn ${isAttendance ? 'active' : ''}`}
@@ -283,177 +283,177 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
         {/* 4. WhatsApp Automation Category (Collapsible Sub-menu) */}
         {canShowWhatsApp && (
-          <div className="nav-group">
-            <button
-              type="button"
-              className={`nav-item-btn nav-group-btn ${isWhatsAppActive ? 'parent-active' : ''}`}
-              onClick={() => toggleSection('whatsapp')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <MessageSquare size={18} className="nav-icon" style={{ color: '#25D366' }} />
-                <span>WhatsApp</span>
-              </div>
-              <ChevronDown 
-                size={16} 
-                className={`nav-chevron ${openSections.whatsapp ? 'open' : ''}`} 
-              />
-            </button>
+            <div className="nav-group">
+              <button
+                type="button"
+                className={`nav-item-btn nav-group-btn ${isWhatsAppActive ? 'parent-active' : ''}`}
+                onClick={() => toggleSection('whatsapp')}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <MessageSquare size={18} className="nav-icon" style={{ color: '#25D366' }} />
+                  <span>WhatsApp</span>
+                </div>
+                <ChevronDown
+                  size={16}
+                  className={`nav-chevron ${openSections.whatsapp ? 'open' : ''}`}
+                />
+              </button>
 
-            {openSections.whatsapp && (
-              <div className="nav-submenu">
-                <button
-                  className={`nav-subitem-btn ${isMessages ? 'active' : ''}`}
-                  onClick={() => handleNavClick('/messages')}
-                >
-                  <span className="subitem-bullet"></span>
-                  <Send size={15} className="subitem-icon" style={{ color: '#25D366' }} />
-                  <span>WhatsApp Messaging</span>
-                </button>
-
-                <button
-                  className={`nav-subitem-btn ${isTemplates ? 'active' : ''}`}
-                  onClick={() => handleNavClick('/templates')}
-                >
-                  <span className="subitem-bullet"></span>
-                  <FileText size={15} className="subitem-icon" style={{ color: '#16a34a' }} />
-                  <span>WhatsApp Templates</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 5. Security & Tokens Category (Collapsible Sub-menu) */}
-        {(!isLeader || canShowSecurity) && (
-          <div className="nav-group">
-            <button
-              type="button"
-              className={`nav-item-btn nav-group-btn ${isSecurityActive ? 'parent-active' : ''}`}
-              onClick={() => toggleSection('security')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <ShieldCheck size={18} className="nav-icon" style={{ color: '#dc2626' }} />
-                <span>Security & Tokens</span>
-              </div>
-              <ChevronDown 
-                size={16} 
-                className={`nav-chevron ${openSections.security ? 'open' : ''}`} 
-              />
-            </button>
-
-            {openSections.security && (
-              <div className="nav-submenu">
-                {!isLeader && (
+              {openSections.whatsapp && (
+                <div className="nav-submenu">
                   <button
-                    className={`nav-subitem-btn ${isStrings ? 'active' : ''}`}
-                    onClick={() => handleNavClick('/strings')}
+                    className={`nav-subitem-btn ${isMessages ? 'active' : ''}`}
+                    onClick={() => handleNavClick('/messages')}
                   >
                     <span className="subitem-bullet"></span>
-                    <KeyRound size={15} className="subitem-icon" style={{ color: '#6366f1' }} />
-                    <span>Generate String</span>
+                    <Send size={15} className="subitem-icon" style={{ color: '#25D366' }} />
+                    <span>WhatsApp Messaging</span>
                   </button>
-                )}
 
-                {canShowSecurity && (
                   <button
-                    className={`nav-subitem-btn ${isSecurity ? 'active' : ''}`}
-                    onClick={() => handleNavClick('/security')}
+                    className={`nav-subitem-btn ${isTemplates ? 'active' : ''}`}
+                    onClick={() => handleNavClick('/templates')}
                   >
                     <span className="subitem-bullet"></span>
-                    <ShieldAlert size={15} className="subitem-icon" style={{ color: '#ef4444' }} />
-                    <span>Proxy & IP Security</span>
+                    <FileText size={15} className="subitem-icon" style={{ color: '#16a34a' }} />
+                    <span>WhatsApp Templates</span>
                   </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* Forms & Polls */}
-        <button
-          className={`nav-item-btn ${isForms ? 'active' : ''}`}
-          onClick={() => handleNavClick('/forms')}
-        >
-          <ClipboardList size={18} className="nav-icon" style={{ color: '#0ea5e9' }} />
-          <span>Forms & Polls</span>
-        </button>
+          {/* 5. Security & Tokens Category (Collapsible Sub-menu) */}
+          {(!isLeader || canShowSecurity) && (
+            <div className="nav-group">
+              <button
+                type="button"
+                className={`nav-item-btn nav-group-btn ${isSecurityActive ? 'parent-active' : ''}`}
+                onClick={() => toggleSection('security')}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <ShieldCheck size={18} className="nav-icon" style={{ color: '#dc2626' }} />
+                  <span>Security & Tokens</span>
+                </div>
+                <ChevronDown
+                  size={16}
+                  className={`nav-chevron ${openSections.security ? 'open' : ''}`}
+                />
+              </button>
 
-        {/* 6. Live Sessions Category (Collapsible Sub-menu) */}
-        {visibleSessions.length > 0 && (
-          <div className="nav-group" style={{ marginTop: '6px' }}>
-            <div className="nav-section-title" style={{ paddingBottom: '2px' }}>Session Management</div>
-            <button
-              type="button"
-              className={`nav-item-btn nav-group-btn ${isSessionsActive ? 'parent-active' : ''}`}
-              onClick={() => toggleSection('sessions')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Clock size={18} className="nav-icon" style={{ color: '#8b5cf6' }} />
-                <span>Live Sessions</span>
-                <span style={{ 
-                  backgroundColor: '#f1f5f9', 
-                  color: '#475569', 
-                  fontSize: '11px', 
-                  fontWeight: 800, 
-                  padding: '1px 6px', 
-                  borderRadius: '10px' 
-                }}>
-                  {visibleSessions.length}
-                </span>
-              </div>
-              <ChevronDown 
-                size={16} 
-                className={`nav-chevron ${openSections.sessions ? 'open' : ''}`} 
-              />
-            </button>
+              {openSections.security && (
+                <div className="nav-submenu">
+                  {!isLeader && (
+                    <button
+                      className={`nav-subitem-btn ${isStrings ? 'active' : ''}`}
+                      onClick={() => handleNavClick('/strings')}
+                    >
+                      <span className="subitem-bullet"></span>
+                      <KeyRound size={15} className="subitem-icon" style={{ color: '#6366f1' }} />
+                      <span>Generate String</span>
+                    </button>
+                  )}
 
-            {openSections.sessions && (
-              <div className="nav-submenu">
-                {visibleSessions.map((s) => (
-                  <button
-                    key={`sess_nav_${s.session_key}`}
-                    className={`nav-subitem-btn ${pathname === `/session/${s.session_key}` ? 'active' : ''}`}
-                    onClick={() => handleNavClick(`/session/${s.session_key}`)}
-                  >
-                    <span className="subitem-bullet"></span>
-                    {renderSessionIcon(s.icon_name, s.session_key, 15, 'subitem-icon')}
-                    <span>{s.session_name}</span>
-                  </button>
-                ))}
+                  {canShowSecurity && (
+                    <button
+                      className={`nav-subitem-btn ${isSecurity ? 'active' : ''}`}
+                      onClick={() => handleNavClick('/security')}
+                    >
+                      <span className="subitem-bullet"></span>
+                      <ShieldAlert size={15} className="subitem-icon" style={{ color: '#ef4444' }} />
+                      <span>Proxy & IP Security</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-                {!isLeader && (
-                  <button
-                    className={`nav-subitem-btn ${isAddSession ? 'active' : ''}`}
-                    onClick={() => handleNavClick('/session_add')}
-                    style={{ color: '#4f46e5', fontWeight: 700 }}
-                  >
-                    <span className="subitem-bullet" style={{ backgroundColor: '#4f46e5' }}></span>
-                    <PlusCircle size={15} className="subitem-icon" />
-                    <span>+ Add New Session</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          {/* Forms & Polls */}
+          <button
+            className={`nav-item-btn ${isForms ? 'active' : ''}`}
+            onClick={() => handleNavClick('/forms')}
+          >
+            <ClipboardList size={18} className="nav-icon" style={{ color: '#0ea5e9' }} />
+            <span>Forms & Polls</span>
+          </button>
 
-      {/* Footer User Info */}
-      <div className="sidebar-footer">
-        <div className="admin-profile">
-          <div className="admin-avatar">
-            {(admin?.name || 'A')[0].toUpperCase()}
-          </div>
-          <div>
-            <div className="admin-name">{admin?.name || 'Administrator'}</div>
-            <div className="admin-role">{userRole}</div>
-          </div>
+          {/* 6. Live Sessions Category (Collapsible Sub-menu) */}
+          {visibleSessions.length > 0 && (
+            <div className="nav-group" style={{ marginTop: '6px' }}>
+              <div className="nav-section-title" style={{ paddingBottom: '2px' }}>Session Management</div>
+              <button
+                type="button"
+                className={`nav-item-btn nav-group-btn ${isSessionsActive ? 'parent-active' : ''}`}
+                onClick={() => toggleSection('sessions')}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Clock size={18} className="nav-icon" style={{ color: '#8b5cf6' }} />
+                  <span>Live Sessions</span>
+                  <span style={{
+                    backgroundColor: '#f1f5f9',
+                    color: '#475569',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    padding: '1px 6px',
+                    borderRadius: '10px'
+                  }}>
+                    {visibleSessions.length}
+                  </span>
+                </div>
+                <ChevronDown
+                  size={16}
+                  className={`nav-chevron ${openSections.sessions ? 'open' : ''}`}
+                />
+              </button>
+
+              {openSections.sessions && (
+                <div className="nav-submenu">
+                  {visibleSessions.map((s) => (
+                    <button
+                      key={`sess_nav_${s.session_key}`}
+                      className={`nav-subitem-btn ${pathname === `/session/${s.session_key}` ? 'active' : ''}`}
+                      onClick={() => handleNavClick(`/session/${s.session_key}`)}
+                    >
+                      <span className="subitem-bullet"></span>
+                      {renderSessionIcon(s.icon_name, s.session_key, 15, 'subitem-icon')}
+                      <span>{s.session_name}</span>
+                    </button>
+                  ))}
+
+                  {!isLeader && (
+                    <button
+                      className={`nav-subitem-btn ${isAddSession ? 'active' : ''}`}
+                      onClick={() => handleNavClick('/session_add')}
+                      style={{ color: '#4f46e5', fontWeight: 700 }}
+                    >
+                      <span className="subitem-bullet" style={{ backgroundColor: '#4f46e5' }}></span>
+                      <PlusCircle size={15} className="subitem-icon" />
+                      <span>+ Add New Session</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        <button className="logout-icon-btn" onClick={logout} title="Log Out">
-          <LogOut size={18} />
-        </button>
-      </div>
-    </aside>
+
+        {/* Footer User Info */}
+        <div className="sidebar-footer">
+          <div className="admin-profile">
+            <div className="admin-avatar">
+              {(admin?.name || 'A')[0].toUpperCase()}
+            </div>
+            <div>
+              <div className="admin-name">{admin?.name || 'Administrator'}</div>
+              <div className="admin-role">{userRole}</div>
+            </div>
+          </div>
+          <button className="logout-icon-btn" onClick={logout} title="Log Out">
+            <LogOut size={18} />
+          </button>
+        </div>
+      </aside>
     </>
   );
 };

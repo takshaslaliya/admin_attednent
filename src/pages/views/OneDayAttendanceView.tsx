@@ -25,7 +25,8 @@ import {
   Sparkles,
   ArrowRight,
   TrendingUp,
-  Download
+  Download,
+  Radio
 } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import './OneDayAttendanceView.css';
@@ -105,10 +106,6 @@ export const OneDayAttendanceView: React.FC = () => {
   const [formStartTime, setFormStartTime] = useState('09:00');
   const [formEndTime, setFormEndTime] = useState('11:00');
   const [formLateTime, setFormLateTime] = useState('');
-  const [formMethod, setFormMethod] = useState<'one_tap' | 'passcode'>('one_tap');
-  const [formPasscode, setFormPasscode] = useState('');
-  const [formTargetType, setFormTargetType] = useState<'all' | 'floors'>('all');
-  const [formTargetFloors, setFormTargetFloors] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
   // Report view state (when viewing individual session report)
   const [activeReportSessionId, setActiveReportSessionId] = useState<number | null>(null);
@@ -150,10 +147,6 @@ export const OneDayAttendanceView: React.FC = () => {
     setFormStartTime('09:00');
     setFormEndTime('11:00');
     setFormLateTime('');
-    setFormMethod('one_tap');
-    setFormPasscode('');
-    setFormTargetType('all');
-    setFormTargetFloors([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     setModalOpen(true);
   };
 
@@ -166,15 +159,6 @@ export const OneDayAttendanceView: React.FC = () => {
     setFormStartTime(sess.start_time?.slice(0, 5) || '09:00');
     setFormEndTime(sess.end_time?.slice(0, 5) || '11:00');
     setFormLateTime(sess.late_time ? sess.late_time.slice(0, 5) : '');
-    setFormMethod(sess.marking_method || 'one_tap');
-    setFormPasscode(sess.passcode || '');
-    setFormTargetType(sess.target_type === 'floors' ? 'floors' : 'all');
-    let floors = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    try {
-      if (typeof sess.target_floors === 'string') floors = JSON.parse(sess.target_floors);
-      else if (Array.isArray(sess.target_floors)) floors = sess.target_floors;
-    } catch (e) {}
-    setFormTargetFloors(floors);
     setModalOpen(true);
   };
 
@@ -193,10 +177,6 @@ export const OneDayAttendanceView: React.FC = () => {
       alert('Start time must be earlier than end time');
       return;
     }
-    if (formMethod === 'passcode' && !formPasscode.trim()) {
-      alert('Please enter a passcode for passcode-protected marking');
-      return;
-    }
 
     setSavingSession(true);
     try {
@@ -207,10 +187,11 @@ export const OneDayAttendanceView: React.FC = () => {
         start_time: formStartTime,
         end_time: formEndTime,
         late_time: formLateTime ? formLateTime : null,
-        marking_method: formMethod,
-        passcode: formMethod === 'passcode' ? formPasscode.trim() : null,
-        target_type: formTargetType,
-        target_floors: formTargetType === 'floors' ? formTargetFloors : null
+        marking_method: 'bluetooth',
+        passcode: null,
+        target_type: 'all',
+        target_floors: null,
+        target_students: null
       };
 
       if (editingSession) {
@@ -808,11 +789,11 @@ export const OneDayAttendanceView: React.FC = () => {
                         </div>
                         <div className="oda-detail-item">
                           <Users size={14} style={{ color: '#059669' }} />
-                          <span>Target: <strong style={{ textTransform: 'capitalize' }}>{sess.target_type}</strong></span>
+                          <span>Audience: <strong>All Students</strong></span>
                         </div>
                         <div className="oda-detail-item">
-                          <KeyRound size={14} style={{ color: '#d97706' }} />
-                          <span>{sess.marking_method === 'passcode' ? 'Code Required' : 'One-Tap'}</span>
+                          <Radio size={14} style={{ color: '#0d9488' }} />
+                          <span>Bluetooth (ESP32)</span>
                         </div>
                       </div>
 
@@ -969,89 +950,59 @@ export const OneDayAttendanceView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Marking Method */}
+                  {/* Bluetooth Verification Method - Strictly Enforced */}
                   <div className="oda-form-group">
-                    <label>Attendance Marking Method</label>
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                        <input
-                          type="radio"
-                          name="markingMethod"
-                          value="one_tap"
-                          checked={formMethod === 'one_tap'}
-                          onChange={() => setFormMethod('one_tap')}
-                        />
-                        <span>⚡ Direct One-Tap Button (Portal)</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                        <input
-                          type="radio"
-                          name="markingMethod"
-                          value="passcode"
-                          checked={formMethod === 'passcode'}
-                          onChange={() => setFormMethod('passcode')}
-                        />
-                        <span>🔐 Passcode / OTP Protected</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Passcode input if required */}
-                  {formMethod === 'passcode' && (
-                    <div className="oda-form-group">
-                      <label>Session Passcode / OTP *</label>
-                      <input
-                        type="text"
-                        className="oda-input"
-                        placeholder="e.g. 7842"
-                        value={formPasscode}
-                        onChange={(e) => setFormPasscode(e.target.value)}
-                        required
-                      />
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        Students must enter this exact passcode in their portal to record attendance.
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Target Audience */}
-                  <div className="oda-form-group">
-                    <label>Target Student Audience</label>
-                    <select
-                      className="oda-input"
-                      value={formTargetType}
-                      onChange={(e) => setFormTargetType(e.target.value as any)}
-                    >
-                      <option value="all">👥 All Enrolled Active Students</option>
-                      <option value="floors">🏢 Floor-Wise Specific Selection</option>
-                    </select>
-                  </div>
-
-                  {/* Floor Selector Pills */}
-                  {formTargetType === 'floors' && (
-                    <div className="oda-form-group">
-                      <label>Select Eligible Floors</label>
-                      <div className="floor-checkbox-pills">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((floor) => {
-                          const isSelected = formTargetFloors.includes(floor);
-                          return (
-                            <div
-                              key={floor}
-                              className={`floor-pill-label ${isSelected ? 'selected' : ''}`}
-                              onClick={() => {
-                                setFormTargetFloors((prev) =>
-                                  prev.includes(floor) ? prev.filter((f) => f !== floor) : [...prev, floor]
-                                );
-                              }}
-                            >
-                              {isSelected ? <Check size={12} strokeWidth={3} /> : null}
-                              <span>Floor {floor}</span>
-                            </div>
-                          );
-                        })}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Radio size={15} color="#0d9488" /> Attendance Verification Method
+                    </label>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      background: '#f0fdfa',
+                      border: '1.5px solid #99f6e4',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      color: '#0f766e',
+                      fontSize: '0.88rem',
+                      fontWeight: 600
+                    }}>
+                      <Radio size={18} style={{ color: '#0d9488', flexShrink: 0 }} />
+                      <div>
+                        <div>ESP32 Bluetooth LE Verification</div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 400, color: '#475569', marginTop: '2px' }}>
+                          Attendance is taken strictly via classroom ESP32 device scanning. No manual or passcode bypass.
+                        </div>
                       </div>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Target Audience - All Students Strictly Enforced */}
+                  <div className="oda-form-group">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Users size={15} color="#0284c7" /> Eligible Student Audience
+                    </label>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      background: '#f0f9ff',
+                      border: '1.5px solid #bae6fd',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      color: '#0369a1',
+                      fontSize: '0.88rem',
+                      fontWeight: 600
+                    }}>
+                      <Users size={18} style={{ color: '#0284c7', flexShrink: 0 }} />
+                      <div>
+                        <div>All Enrolled Active Students (Hostel-wide)</div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 400, color: '#475569', marginTop: '2px' }}>
+                          Every active student is eligible to mark attendance. No specific floor or student restrictions.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="modal-footer">
@@ -1082,3 +1033,4 @@ export const OneDayAttendanceView: React.FC = () => {
 };
 
 export default OneDayAttendanceView;
+
