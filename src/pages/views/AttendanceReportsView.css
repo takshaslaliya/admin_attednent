@@ -247,6 +247,74 @@
   align-items: center;
 }
 
+/* Interactive Chart Series Filter Pills */
+.chart-series-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.chart-series-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.chart-series-pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.chart-series-pill:hover {
+  transform: translateY(-1px);
+}
+
+.chart-series-pill.active {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.chart-series-pill.active.present {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.chart-series-pill.active.absent {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.chart-series-pill.active.late {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.chart-series-pill.active.leave {
+  border-color: #7dd3fc;
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.chart-series-pill:not(.active) {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
 .chart-card-header h4 {
   font-size: 1rem;
   font-weight: 700;

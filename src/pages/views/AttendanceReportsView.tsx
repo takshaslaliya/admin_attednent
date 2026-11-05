@@ -62,6 +62,7 @@ interface StudentDetail {
   sessions_conducted: number;
   sessions_attended: number;
   total_absences: number;
+  total_leaves?: number;
   attendance_percentage: number;
   late_arrivals: number;
   on_time_count: number;
@@ -70,7 +71,7 @@ interface StudentDetail {
   attendance_history: Array<{
     date: string;
     session_type: string;
-    status: 'present' | 'late' | 'absent';
+    status: 'present' | 'late' | 'absent' | 'leave';
     marked_time?: string | null;
     source: string;
   }>;
@@ -80,6 +81,8 @@ interface SummaryData {
   total_registered_students: number;
   total_students_present: number;
   total_students_absent: number;
+  total_students_leave?: number;
+  total_leave_instances?: number;
   overall_attendance_percentage: number;
   total_late_arrivals: number;
   total_on_time_count: number;
@@ -90,11 +93,13 @@ interface SummaryData {
     absent: number;
     late: number;
     on_time: number;
+    leave?: number;
   }>;
   punctuality_breakdown: {
     on_time: number;
     late: number;
     absent: number;
+    leave?: number;
   };
 }
 
@@ -265,8 +270,21 @@ export const AttendanceReportsView: React.FC = () => {
 
   // Search & Filtering inside Table
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'absent' | 'late' | 'on_time' | 'low'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'absent' | 'late' | 'on_time' | 'low' | 'leave'>('all');
   const [sortBy, setSortBy] = useState<'pct_desc' | 'pct_asc' | 'name_asc' | 'name_desc' | 'room_asc' | 'late_desc'>('pct_desc');
+
+  // Chart Series Visibility Toggles
+  const [chartSeries, setChartSeries] = useState<{
+    present: boolean;
+    absent: boolean;
+    late: boolean;
+    leave: boolean;
+  }>({
+    present: true,
+    absent: true,
+    late: true,
+    leave: true,
+  });
 
   // Bulk Selection
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
@@ -447,6 +465,7 @@ export const AttendanceReportsView: React.FC = () => {
         if (statusFilter === 'late') return stu.late_arrivals > 0;
         if (statusFilter === 'on_time') return stu.on_time_count > 0;
         if (statusFilter === 'low') return stu.attendance_percentage < 75;
+        if (statusFilter === 'leave') return (stu.total_leaves || 0) > 0;
 
         return true;
       })
@@ -622,15 +641,16 @@ export const AttendanceReportsView: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // Donut chart colors
-  const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444'];
+  // Donut chart colors: On-Time, Late, Absent, On Leave
+  const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#0ea5e9'];
 
   const punctualityData = summary
     ? [
       { name: 'On-Time', value: summary.punctuality_breakdown.on_time },
       { name: 'Late', value: summary.punctuality_breakdown.late },
       { name: 'Absent', value: summary.punctuality_breakdown.absent },
-    ]
+      { name: 'On Leave', value: summary.punctuality_breakdown.leave || 0 },
+    ].filter((p) => p.value > 0)
     : [];
 
   const selectedStudentsList = useMemo(() => {
@@ -926,6 +946,22 @@ export const AttendanceReportsView: React.FC = () => {
               Punctual entries
             </div>
           </div>
+
+          {/* Approved Leaves */}
+          <div className="kpi-card">
+            <div className="kpi-card-header">
+              <span className="kpi-card-title">Approved Leaves</span>
+              <div className="kpi-icon-wrap" style={{ background: '#e0f2fe', color: '#0284c7' }}>
+                <Calendar size={22} />
+              </div>
+            </div>
+            <div className="kpi-card-value" style={{ color: '#0284c7' }}>
+              {summary.total_students_leave ?? 0}
+            </div>
+            <div className="kpi-card-subtext" style={{ color: '#0369a1' }}>
+              {summary.total_leave_instances ?? 0} total leave-days
+            </div>
+          </div>
         </section>
       )}
 
@@ -934,21 +970,74 @@ export const AttendanceReportsView: React.FC = () => {
         <section className="charts-grid">
           {/* Daily Attendance Trend */}
           <div className="chart-card">
-            <div className="chart-card-header">
-              <h4>Daily Attendance Performance ({startDate} to {endDate})</h4>
-              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Present vs Absent across selected period</span>
+            <div className="chart-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h4>Daily Attendance Performance ({startDate} to {endDate})</h4>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  Present, Absent, Late Arrivals & Approved Leaves across selected period
+                </span>
+              </div>
+
+              {/* Series Visibility Toggles */}
+              <div className="chart-series-pills">
+                <button
+                  type="button"
+                  className={`chart-series-pill ${chartSeries.present ? 'active present' : ''}`}
+                  onClick={() => setChartSeries((p) => ({ ...p, present: !p.present }))}
+                  title="Toggle Present line"
+                >
+                  <span className="dot" style={{ background: '#4f46e5' }}></span>
+                  <span>Present</span>
+                </button>
+                <button
+                  type="button"
+                  className={`chart-series-pill ${chartSeries.absent ? 'active absent' : ''}`}
+                  onClick={() => setChartSeries((p) => ({ ...p, absent: !p.absent }))}
+                  title="Toggle Absent line"
+                >
+                  <span className="dot" style={{ background: '#f43f5e' }}></span>
+                  <span>Absent</span>
+                </button>
+                <button
+                  type="button"
+                  className={`chart-series-pill ${chartSeries.late ? 'active late' : ''}`}
+                  onClick={() => setChartSeries((p) => ({ ...p, late: !p.late }))}
+                  title="Toggle Late Arrivals line"
+                >
+                  <span className="dot" style={{ background: '#f59e0b' }}></span>
+                  <span>Late</span>
+                </button>
+                <button
+                  type="button"
+                  className={`chart-series-pill ${chartSeries.leave ? 'active leave' : ''}`}
+                  onClick={() => setChartSeries((p) => ({ ...p, leave: !p.leave }))}
+                  title="Toggle Approved Leave line"
+                >
+                  <span className="dot" style={{ background: '#0ea5e9' }}></span>
+                  <span>Leave</span>
+                </button>
+              </div>
             </div>
-            <div style={{ height: 260, width: '100%' }}>
+
+            <div style={{ height: 280, width: '100%', marginTop: '4px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={summary.daily_trends}>
                   <defs>
                     <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
+                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.02} />
                     </linearGradient>
                     <linearGradient id="colorAbsent" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="colorLate" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="colorLeave" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -958,8 +1047,18 @@ export const AttendanceReportsView: React.FC = () => {
                     contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
                   <Legend />
-                  <Area type="monotone" dataKey="present" stroke="#4f46e5" strokeWidth={2} fillOpacity={1} fill="url(#colorPresent)" name="Present" />
-                  <Area type="monotone" dataKey="absent" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorAbsent)" name="Absent" />
+                  {chartSeries.present && (
+                    <Area type="monotone" dataKey="present" stroke="#4f46e5" strokeWidth={2.5} fillOpacity={1} fill="url(#colorPresent)" name="Present" />
+                  )}
+                  {chartSeries.absent && (
+                    <Area type="monotone" dataKey="absent" stroke="#f43f5e" strokeWidth={2.5} fillOpacity={1} fill="url(#colorAbsent)" name="Absent" />
+                  )}
+                  {chartSeries.late && (
+                    <Area type="monotone" dataKey="late" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorLate)" name="Late Arrivals" />
+                  )}
+                  {chartSeries.leave && (
+                    <Area type="monotone" dataKey="leave" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorLeave)" name="On Leave" />
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -1096,6 +1195,12 @@ export const AttendanceReportsView: React.FC = () => {
             onClick={() => setStatusFilter('low')}
           >
             Low Attendance (&lt;75%)
+          </button>
+          <button
+            className={`status-pill-btn ${statusFilter === 'leave' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('leave')}
+          >
+            On Leave
           </button>
         </div>
 
@@ -1746,6 +1851,10 @@ export const AttendanceReportsView: React.FC = () => {
                                 <span style={{ color: '#b45309', fontWeight: 700, background: '#fef3c7', padding: '2px 8px', borderRadius: '4px' }}>
                                   ⏰ Late Arrival
                                 </span>
+                              ) : h.status === 'leave' ? (
+                                <span style={{ color: '#0284c7', fontWeight: 700, background: '#e0f2fe', padding: '2px 8px', borderRadius: '4px' }}>
+                                  🏖️ Approved Leave
+                                </span>
                               ) : (
                                 <span style={{ color: '#be123c', fontWeight: 700, background: '#ffe4e6', padding: '2px 8px', borderRadius: '4px' }}>
                                   ✗ Absent
@@ -1755,7 +1864,11 @@ export const AttendanceReportsView: React.FC = () => {
                             <td>{h.marked_time || '—'}</td>
                             <td>
                               <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                {h.source === 'hsh_api' ? 'External HSH API' : 'Local BLE Scanner'}
+                                {h.source === 'hsh_api'
+                                  ? 'External HSH API'
+                                  : h.source === 'leave_portal'
+                                  ? 'Official Leave Portal'
+                                  : 'Local BLE Scanner'}
                               </span>
                             </td>
                           </tr>
