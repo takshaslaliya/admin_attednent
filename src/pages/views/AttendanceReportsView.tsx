@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Users, 
@@ -24,7 +24,13 @@ import {
   History,
   FileSpreadsheet,
   CheckSquare,
-  Square
+  Square,
+  Edit3,
+  Save,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  Tag
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -110,6 +116,132 @@ const PRESET_DATE_RANGES = [
   { key: '6months', label: 'Last 6 Months' },
 ];
 
+export const DEFAULT_PARENT_TEMPLATE = `🏛️ *SHREE SWAMINARAYAN GURUKUL HOSTEL*
+📋 *Official Attendance Report*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Respected Parent/Guardian of *{student_name}*,
+
+Here is the attendance report for the period *{start_date}* to *{end_date}*:
+
+👤 *Student Name:* {student_name}
+🚪 *Room Number:* {room_number}
+⏰ *Session Category:* {session_name}
+
+📊 *Attendance Performance:*
+• Total Sessions Conducted: *{sessions_conducted}*
+• Sessions Attended: *{sessions_attended}*
+• Total Absences: *{total_absences}*
+• On-Time Arrivals: *{on_time_count}*
+• Late Arrivals: *{late_arrivals}*
+• Attendance Rate: *{attendance_percentage}%* ({performance_rating})
+• Last Recorded Attendance: *{last_attendance_date}*
+{admin_note}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+_For queries, please contact the Hostel Warden / Administration._
+_Hostel Attendance & Management System (HAMS)_`;
+
+export const DEFAULT_STUDENT_TEMPLATE = `🏛️ *SHREE SWAMINARAYAN GURUKUL HOSTEL*
+📋 *Official Attendance Report*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Dear *{student_name}*,
+
+Here is the attendance report for the period *{start_date}* to *{end_date}*:
+
+👤 *Student Name:* {student_name}
+🚪 *Room Number:* {room_number}
+⏰ *Session Category:* {session_name}
+
+📊 *Attendance Performance:*
+• Total Sessions Conducted: *{sessions_conducted}*
+• Sessions Attended: *{sessions_attended}*
+• Total Absences: *{total_absences}*
+• On-Time Arrivals: *{on_time_count}*
+• Late Arrivals: *{late_arrivals}*
+• Attendance Rate: *{attendance_percentage}%* ({performance_rating})
+• Last Recorded Attendance: *{last_attendance_date}*
+{admin_note}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+_Hostel Attendance & Management System (HAMS)_`;
+
+const TEMPLATE_VARIABLES = [
+  { tag: '{student_name}', label: 'Student Name' },
+  { tag: '{room_number}', label: 'Room No' },
+  { tag: '{student_code}', label: 'Code' },
+  { tag: '{session_name}', label: 'Session' },
+  { tag: '{start_date}', label: 'Start Date' },
+  { tag: '{end_date}', label: 'End Date' },
+  { tag: '{sessions_conducted}', label: 'Conducted' },
+  { tag: '{sessions_attended}', label: 'Attended' },
+  { tag: '{total_absences}', label: 'Absent' },
+  { tag: '{on_time_count}', label: 'On-Time' },
+  { tag: '{late_arrivals}', label: 'Late' },
+  { tag: '{attendance_percentage}', label: 'Percentage' },
+  { tag: '{performance_rating}', label: 'Rating' },
+  { tag: '{last_attendance_date}', label: 'Last Date' },
+  { tag: '{admin_note}', label: 'Admin Note' },
+];
+
+function renderClientTemplate(
+  template: string,
+  student: StudentDetail | null | undefined,
+  meta: {
+    start_date: string;
+    end_date: string;
+    session_name: string;
+    total_conducted: number;
+    admin_note?: string;
+  }
+): string {
+  const tmpl = template || DEFAULT_PARENT_TEMPLATE;
+  if (!student) {
+    return tmpl
+      .replace(/{student_name}/g, '[Student Name]')
+      .replace(/{room_number}/g, '[Room Number]')
+      .replace(/{student_code}/g, '[Code]')
+      .replace(/{session_name}/g, meta.session_name)
+      .replace(/{start_date}/g, meta.start_date)
+      .replace(/{end_date}/g, meta.end_date)
+      .replace(/{sessions_conducted}/g, String(meta.total_conducted))
+      .replace(/{sessions_attended}/g, '[Attended Count]')
+      .replace(/{total_absences}/g, '[Absences Count]')
+      .replace(/{on_time_count}/g, '[On-Time Count]')
+      .replace(/{late_arrivals}/g, '[Late Count]')
+      .replace(/{attendance_percentage}/g, '[Rate]')
+      .replace(/{performance_rating}/g, '[Performance Rating]')
+      .replace(/{last_attendance_date}/g, '[Last Date & Time]')
+      .replace(/{admin_note}/g, meta.admin_note ? `\n💬 *Admin Remark:* ${meta.admin_note}\n` : '');
+  }
+
+  let perfRating = 'Excellent';
+  const pct = student.attendance_percentage;
+  if (pct < 50) perfRating = 'Needs Immediate Attention';
+  else if (pct < 75) perfRating = 'Average / Improvement Needed';
+  else if (pct < 90) perfRating = 'Good';
+
+  const lastAttended = student.last_attendance_date
+    ? `${student.last_attendance_date} ${student.last_attendance_time || ''}`.trim()
+    : 'No Record';
+
+  const adminNoteText = meta.admin_note ? `\n💬 *Admin Remark:* ${meta.admin_note}\n` : '';
+
+  return tmpl
+    .replace(/{student_name}/g, student.name || '[Student Name]')
+    .replace(/{room_number}/g, String(student.room_number || 'N/A'))
+    .replace(/{student_code}/g, String(student.student_code || ''))
+    .replace(/{session_name}/g, meta.session_name)
+    .replace(/{start_date}/g, meta.start_date)
+    .replace(/{end_date}/g, meta.end_date)
+    .replace(/{sessions_conducted}/g, String(student.sessions_conducted ?? meta.total_conducted))
+    .replace(/{sessions_attended}/g, String(student.sessions_attended ?? 0))
+    .replace(/{total_absences}/g, String(student.total_absences ?? 0))
+    .replace(/{on_time_count}/g, String(student.on_time_count ?? 0))
+    .replace(/{late_arrivals}/g, String(student.late_arrivals ?? 0))
+    .replace(/{attendance_percentage}/g, String(student.attendance_percentage ?? 0))
+    .replace(/{performance_rating}/g, perfRating)
+    .replace(/{last_attendance_date}/g, lastAttended)
+    .replace(/{admin_note}/g, adminNoteText);
+}
+
 export const AttendanceReportsView: React.FC = () => {
   // Filters & State
   const [sessionType, setSessionType] = useState('all');
@@ -152,11 +284,45 @@ export const AttendanceReportsView: React.FC = () => {
   // Student History Drawer/Modal
   const [historyModalStudent, setHistoryModalStudent] = useState<StudentDetail | null>(null);
 
-  // Initialize bounds & presets on mount
+  // Customizable Message Templates State
+  const [templates, setTemplates] = useState<Record<string, string>>({
+    parent_report: DEFAULT_PARENT_TEMPLATE,
+    student_report: DEFAULT_STUDENT_TEMPLATE
+  });
+  const [activeTemplateText, setActiveTemplateText] = useState<string>(DEFAULT_PARENT_TEMPLATE);
+  const [isEditingTemplate, setIsEditingTemplate] = useState<boolean>(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState<boolean>(false);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [previewStudentId, setPreviewStudentId] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Initialize bounds, presets & templates on mount
   useEffect(() => {
     fetchSessionConfig();
+    fetchTemplates();
     applyPresetRange('30days');
   }, []);
+
+  // Fetch templates from database
+  const fetchTemplates = async () => {
+    try {
+      const res = await apiClient.get('/attendance/reports/templates');
+      if (res.data?.success && res.data?.data) {
+        setTemplates((prev) => ({
+          ...prev,
+          ...res.data.data
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to fetch attendance report templates, using defaults:', e);
+    }
+  };
+
+  // Sync active template when preview recipient or saved templates change
+  useEffect(() => {
+    const key = previewRecipient === 'parent' ? 'parent_report' : 'student_report';
+    setActiveTemplateText(templates[key] || (previewRecipient === 'parent' ? DEFAULT_PARENT_TEMPLATE : DEFAULT_STUDENT_TEMPLATE));
+  }, [previewRecipient, templates]);
 
   // Fetch session config & available 6-month bounds from backend
   const fetchSessionConfig = async () => {
@@ -313,7 +479,67 @@ export const AttendanceReportsView: React.FC = () => {
   // Open Preview Modal
   const handleOpenPreview = (recipient: 'parent' | 'student') => {
     setPreviewRecipient(recipient);
+    setIsEditingTemplate(false);
+    setSaveSuccessMessage(null);
+    const key = recipient === 'parent' ? 'parent_report' : 'student_report';
+    setActiveTemplateText(templates[key] || (recipient === 'parent' ? DEFAULT_PARENT_TEMPLATE : DEFAULT_STUDENT_TEMPLATE));
+    if (selectedStudentIds.length > 0) {
+      setPreviewStudentId(selectedStudentIds[0]);
+    }
     setPreviewModalOpen(true);
+  };
+
+  // Insert variable tag into template textarea at cursor
+  const handleInsertVariable = (tag: string) => {
+    if (!textareaRef.current) {
+      setActiveTemplateText((prev) => prev + tag);
+      return;
+    }
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const current = activeTemplateText;
+    const updated = current.substring(0, start) + tag + current.substring(end);
+    setActiveTemplateText(updated);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    }, 0);
+  };
+
+  // Save modified template to backend database
+  const handleSaveTemplate = async () => {
+    setIsSavingTemplate(true);
+    setSaveSuccessMessage(null);
+    const templateKey = previewRecipient === 'parent' ? 'parent_report' : 'student_report';
+    try {
+      const res = await apiClient.post('/attendance/reports/templates', {
+        template_key: templateKey,
+        content: activeTemplateText
+      });
+      if (res.data?.success) {
+        setTemplates((prev) => ({
+          ...prev,
+          [templateKey]: activeTemplateText
+        }));
+        setSaveSuccessMessage('Template saved successfully! All student previews have been updated.');
+        setIsEditingTemplate(false);
+        setTimeout(() => setSaveSuccessMessage(null), 4000);
+      } else {
+        alert(res.data?.message || 'Failed to save template');
+      }
+    } catch (err: any) {
+      console.error('Failed to save template:', err);
+      alert(err.response?.data?.message || err.message || 'Error saving template to server');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  // Reset template back to standard default
+  const handleResetTemplate = () => {
+    const defaultText = previewRecipient === 'parent' ? DEFAULT_PARENT_TEMPLATE : DEFAULT_STUDENT_TEMPLATE;
+    setActiveTemplateText(defaultText);
   };
 
   // Dispatch Notifications
@@ -333,6 +559,7 @@ export const AttendanceReportsView: React.FC = () => {
           end_date: endDate
         },
         custom_note: customNote.trim() || undefined,
+        custom_template: activeTemplateText,
         idempotency_key: idempotencyKey
       };
 
@@ -409,6 +636,40 @@ export const AttendanceReportsView: React.FC = () => {
   const selectedStudentsList = useMemo(() => {
     return students.filter((s) => selectedStudentIds.includes(s.student_id));
   }, [students, selectedStudentIds]);
+
+  // Ensure previewStudentId is pointing to an active selected student
+  useEffect(() => {
+    if (selectedStudentsList.length > 0) {
+      if (!previewStudentId || !selectedStudentsList.some((s) => s.student_id === previewStudentId)) {
+        setPreviewStudentId(selectedStudentsList[0].student_id);
+      }
+    } else {
+      setPreviewStudentId(null);
+    }
+  }, [selectedStudentsList, previewModalOpen]);
+
+  const currentPreviewStudent = useMemo(() => {
+    if (!previewStudentId) return selectedStudentsList[0] || null;
+    return selectedStudentsList.find((s) => s.student_id === previewStudentId) || selectedStudentsList[0] || null;
+  }, [selectedStudentsList, previewStudentId]);
+
+  const currentPreviewIndex = useMemo(() => {
+    if (!currentPreviewStudent) return 0;
+    const idx = selectedStudentsList.findIndex((s) => s.student_id === currentPreviewStudent.student_id);
+    return idx >= 0 ? idx : 0;
+  }, [selectedStudentsList, currentPreviewStudent]);
+
+  const handlePrevStudent = () => {
+    if (selectedStudentsList.length === 0) return;
+    const newIdx = (currentPreviewIndex - 1 + selectedStudentsList.length) % selectedStudentsList.length;
+    setPreviewStudentId(selectedStudentsList[newIdx].student_id);
+  };
+
+  const handleNextStudent = () => {
+    if (selectedStudentsList.length === 0) return;
+    const newIdx = (currentPreviewIndex + 1) % selectedStudentsList.length;
+    setPreviewStudentId(selectedStudentsList[newIdx].student_id);
+  };
 
   return (
     <div className="attendance-reports-container">
@@ -1053,35 +1314,193 @@ export const AttendanceReportsView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Message Template Preview */}
+                {/* Message Template Preview & Interactive Editor */}
                 <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                    WhatsApp Notification Message Preview:
+                  <div className="template-section-header">
+                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#334155' }}>
+                      WhatsApp Notification Message Preview:
+                    </div>
+                    <div className="template-editor-tabs">
+                      <button
+                        type="button"
+                        className={`template-tab-btn ${!isEditingTemplate ? 'active' : ''}`}
+                        onClick={() => setIsEditingTemplate(false)}
+                      >
+                        <Eye size={13} />
+                        <span>Live Preview</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`template-tab-btn ${isEditingTemplate ? 'active' : ''}`}
+                        onClick={() => setIsEditingTemplate(true)}
+                      >
+                        <Edit3 size={13} />
+                        <span>Edit Template</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="message-preview-card">
-                    {`🏛️ *SHREE SWAMINARAYAN GURUKUL HOSTEL*
-📋 *Official Attendance Report*
-━━━━━━━━━━━━━━━━━━━━━━━━━
-${previewRecipient === 'parent' ? 'Respected Parent/Guardian of *[Student Name]*,' : 'Dear *[Student Name]*, '}
 
-Here is the attendance report for the period *${startDate}* to *${endDate}*:
+                  {saveSuccessMessage && (
+                    <div className="save-success-banner" style={{ marginBottom: '10px' }}>
+                      <Check size={16} />
+                      <span>{saveSuccessMessage}</span>
+                    </div>
+                  )}
 
-👤 *Student Name:* [Student Name]
-🚪 *Room Number:* [Room Number]
-⏰ *Session Category:* ${sessionType.toUpperCase()}
+                  {!isEditingTemplate ? (
+                    <>
+                      {/* Student Selector Bar for Live Preview */}
+                      {selectedStudentsList.length > 0 && (
+                        <div className="student-preview-bar">
+                          <div className="student-preview-select-wrap">
+                            <Users size={15} style={{ color: '#4f46e5' }} />
+                            <span style={{ fontSize: '0.785rem', fontWeight: 700, color: '#475569' }}>
+                              Previewing Student:
+                            </span>
+                            <select
+                              className="student-preview-select"
+                              value={previewStudentId || ''}
+                              onChange={(e) => setPreviewStudentId(Number(e.target.value))}
+                            >
+                              {selectedStudentsList.map((stu) => (
+                                <option key={stu.student_id} value={stu.student_id}>
+                                  {stu.name} — Room {stu.room_number || 'N/A'} ({stu.attendance_percentage}%)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-📊 *Attendance Performance:*
-• Total Sessions Conducted: *${summary?.total_sessions_conducted || 0}*
-• Sessions Attended: *[Attended Count]*
-• Total Absences: *[Absences Count]*
-• On-Time Arrivals: *[On-Time Count]*
-• Late Arrivals: *[Late Count]*
-• Attendance Rate: *[Rate]%* ([Performance Rating])
-• Last Recorded Attendance: *[Last Date & Time]*
-${customNote ? `\n💬 *Admin Remark:* ${customNote}\n` : ''}
-━━━━━━━━━━━━━━━━━━━━━━━━━
-_For queries, please contact the Hostel Warden / Administration._`}
-                  </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              className="student-preview-nav-btn"
+                              onClick={handlePrevStudent}
+                              disabled={selectedStudentsList.length <= 1}
+                              title="Previous student"
+                            >
+                              <ChevronLeft size={13} />
+                              <span>Prev</span>
+                            </button>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+                              {currentPreviewIndex + 1} of {selectedStudentsList.length}
+                            </span>
+                            <button
+                              type="button"
+                              className="student-preview-nav-btn"
+                              onClick={handleNextStudent}
+                              disabled={selectedStudentsList.length <= 1}
+                              title="Next student"
+                            >
+                              <span>Next</span>
+                              <ChevronRight size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              style={{ height: '30px', padding: '0 10px', fontSize: '0.75rem' }}
+                              onClick={() => setIsEditingTemplate(true)}
+                              title="Customize this template"
+                            >
+                              <Edit3 size={13} />
+                              <span>Edit Template</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Formatted Live Message Card for Selected Student */}
+                      <div className="message-preview-card">
+                        {renderClientTemplate(activeTemplateText, currentPreviewStudent, {
+                          start_date: startDate,
+                          end_date: endDate,
+                          session_name: sessionType.toUpperCase(),
+                          total_conducted: summary?.total_sessions_conducted || 0,
+                          admin_note: customNote
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    /* Interactive Template Editor Box */
+                    <div className="template-editor-box">
+                      <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                        Modify the notification template below. Click any dynamic tag to insert it at your cursor. Saving permanently updates the template in the database and reflects immediately across all student previews.
+                      </div>
+
+                      <div>
+                        <div className="variable-pills-label" style={{ marginBottom: '4px' }}>
+                          Click tag to insert at cursor:
+                        </div>
+                        <div className="variable-pills-container">
+                          {TEMPLATE_VARIABLES.map((v) => (
+                            <button
+                              key={v.tag}
+                              type="button"
+                              className="variable-pill-btn"
+                              onClick={() => handleInsertVariable(v.tag)}
+                              title={`Insert ${v.label}`}
+                            >
+                              + {v.tag}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <textarea
+                        ref={textareaRef}
+                        className="template-textarea"
+                        value={activeTemplateText}
+                        onChange={(e) => setActiveTemplateText(e.target.value)}
+                        rows={10}
+                        placeholder="Compose attendance report notification template..."
+                      />
+
+                      <div className="template-editor-actions">
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="btn-save-template"
+                            onClick={handleSaveTemplate}
+                            disabled={isSavingTemplate}
+                          >
+                            {isSavingTemplate ? (
+                              <>
+                                <RefreshCw size={14} className="animate-spin" />
+                                <span>Saving...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Save size={14} />
+                                <span>Save Template</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ height: '34px', fontSize: '0.8rem' }}
+                            onClick={handleResetTemplate}
+                            title="Reset to default format"
+                          >
+                            <RotateCcw size={14} />
+                            <span>Reset to Default</span>
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ height: '34px', fontSize: '0.8rem' }}
+                          onClick={() => {
+                            const key = previewRecipient === 'parent' ? 'parent_report' : 'student_report';
+                            setActiveTemplateText(templates[key] || DEFAULT_PARENT_TEMPLATE);
+                            setIsEditingTemplate(false);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Optional Custom Note */}
