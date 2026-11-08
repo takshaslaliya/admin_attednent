@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import html2canvas from 'html2canvas';
 import {
   Users,
   CheckCircle2,
@@ -30,7 +31,11 @@ import {
   RotateCcw,
   ChevronLeft,
   ChevronRight,
-  Tag
+  Tag,
+  Printer,
+  Copy,
+  Layers,
+  FileText
 } from 'lucide-react';
 import {
   AreaChart,
@@ -51,6 +56,22 @@ import apiClient from '../../services/apiClient';
 import { HamsCard } from '../../components/HamsCard';
 import './AttendanceReportsView.css';
 
+export interface MonthBreakdownItem {
+  year: number;
+  period: string;
+  month_key: string;
+  total_days: number;
+  leave_days: number;
+  sessions: Record<string, {
+    conducted: number;
+    attended: number;
+    percentage: number;
+  }>;
+  overall_conducted: number;
+  overall_attended: number;
+  overall_percentage: number;
+}
+
 interface StudentDetail {
   student_id: number;
   student_code: string;
@@ -68,6 +89,7 @@ interface StudentDetail {
   on_time_count: number;
   last_attendance_date: string | null;
   last_attendance_time: string | null;
+  monthly_breakdown?: MonthBreakdownItem[];
   attendance_history: Array<{
     date: string;
     session_type: string;
@@ -87,6 +109,7 @@ interface SummaryData {
   total_late_arrivals: number;
   total_on_time_count: number;
   total_sessions_conducted: number;
+  monthly_breakdown?: MonthBreakdownItem[];
   daily_trends: Array<{
     date: string;
     present: number;
@@ -248,8 +271,10 @@ function renderClientTemplate(
 }
 
 export const AttendanceReportsView: React.FC = () => {
-  // Filters & State
-  const [sessionType, setSessionType] = useState('all');
+  // Multi-Session Selection State
+  const [selectedSessions, setSelectedSessions] = useState<string[]>(['all']);
+
+  // Date Filter Modes & Dates
   const [filterMode, setFilterMode] = useState<'preset' | 'month' | 'custom'>('preset');
   const [selectedPreset, setSelectedPreset] = useState('30days');
   const [selectedMonth, setSelectedMonth] = useState('');
@@ -267,6 +292,13 @@ export const AttendanceReportsView: React.FC = () => {
   const [students, setStudents] = useState<StudentDetail[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Main Screen Table View Mode ('students' table or 'month_matrix' spreadsheet)
+  const [mainTableViewMode, setMainTableViewMode] = useState<'students' | 'month_matrix'>('students');
+
+  // Matrix Filter State (matching Image 2 & 3)
+  const [matrixStudentFilter, setMatrixStudentFilter] = useState('all');
+  const [matrixRoomFilter, setMatrixRoomFilter] = useState('all');
 
   // Search & Filtering inside Table
   const [searchQuery, setSearchQuery] = useState('');
@@ -289,11 +321,17 @@ export const AttendanceReportsView: React.FC = () => {
   // Bulk Selection
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
 
-  // Modals
+  // Modals & Preview Configuration
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewRecipient, setPreviewRecipient] = useState<'parent' | 'student'>('parent');
+  const [activePreviewTab, setActivePreviewTab] = useState<'report_card' | 'message_text'>('report_card');
   const [customNote, setCustomNote] = useState('');
   const [sendingNotifications, setSendingNotifications] = useState(false);
+  const [attachReportImage, setAttachReportImage] = useState<boolean>(true);
+  const [isExportingImage, setIsExportingImage] = useState<boolean>(false);
+
+  // Reference for capturing image
+  const reportCardRef = useRef<HTMLDivElement>(null);
 
   // Delivery Status Modal
   const [deliveryStatusModalOpen, setDeliveryStatusModalOpen] = useState(false);
@@ -313,6 +351,67 @@ export const AttendanceReportsView: React.FC = () => {
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const [previewStudentId, setPreviewStudentId] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Computed Session Values
+  const sessionType = useMemo(() => {
+    if (selectedSessions.includes('all') || selectedSessions.length === 0) return 'all';
+    return selectedSessions.join(',');
+  }, [selectedSessions]);
+
+  const sessionLabel = useMemo(() => {
+    if (selectedSessions.includes('all')) return 'All Sessions';
+    return selectedSessions
+      .map((k) => SESSION_OPTIONS.find((s) => s.key === k)?.label || k.toUpperCase())
+      .join(' + ');
+  }, [selectedSessions]);
+
+  const activeSessionKeys = useMemo(() => {
+    if (selectedSessions.includes('all')) {
+      return ['aarti', 'sabha', 'lunch', 'dinner', 'night'];
+    }
+    return selectedSessions;
+  }, [selectedSessions]);
+
+  // Multi-Session Toggle Handler
+  const handleToggleSession = (key: string) => {
+    if (key === 'all') {
+      setSelectedSessions(['all']);
+      return;
+    }
+    setSelectedSessions((prev) => {
+      if (prev.includes('all')) {
+        return [key];
+      }
+      if (prev.includes(key)) {
+        const filtered = prev.filter((k) => k !== key);
+        return filtered.length === 0 ? ['all'] : filtered;
+      }
+      const updated = [...prev, key];
+      const individualKeys = SESSION_OPTIONS.filter((o) => o.key !== 'all').map((o) => o.key);
+      const hasAll = individualKeys.every((k) => updated.includes(k));
+      return hasAll ? ['all'] : updated;
+    });
+  };
+
+  // Header class selector for spreadsheet columns
+  const getSessionHeaderClass = (key: string) => {
+    if (key === 'aarti') return 'th-cat-aarti';
+    if (key === 'sabha') return 'th-cat-sabha';
+    if (key === 'dates') return 'th-cat-dates';
+    if (key === 'year') return 'th-cat-year';
+    return 'th-cat-other';
+  };
+
+  // Available Rooms for filter dropdown
+  const availableRooms = useMemo(() => {
+    const rooms = new Set<string>();
+    students.forEach((s) => {
+      if (s.room_number && s.room_number !== 'N/A') {
+        rooms.add(String(s.room_number));
+      }
+    });
+    return Array.from(rooms).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [students]);
 
   // Initialize bounds, presets & templates on mount
   useEffect(() => {
@@ -438,18 +537,198 @@ export const AttendanceReportsView: React.FC = () => {
     }
   };
 
-  // Auto-generate report when dates/session are first set
+  // Auto-generate report when dates/session change
   useEffect(() => {
     if (startDate && endDate) {
       handleGenerateReport();
     }
   }, [sessionType]);
 
+  // Robust Monthly Breakdown Fallback Helpers
+  const getStudentBreakdown = (student: StudentDetail | null | undefined): MonthBreakdownItem[] => {
+    if (!student) return [];
+    if (student.monthly_breakdown && student.monthly_breakdown.length > 0) {
+      return student.monthly_breakdown;
+    }
+
+    const map = new Map<string, {
+      year: number;
+      period: string;
+      month_key: string;
+      dates: Set<string>;
+      leaves: number;
+      sessions: Record<string, { conducted: number; attended: number }>;
+    }>();
+
+    (student.attendance_history || []).forEach((h) => {
+      const ym = h.date.slice(0, 7);
+      if (!map.has(ym)) {
+        const [y, m] = ym.split('-');
+        const d = new Date(Number(y), Number(m) - 1, 1);
+        const period = d.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
+        map.set(ym, {
+          year: Number(y),
+          period,
+          month_key: ym,
+          dates: new Set(),
+          leaves: 0,
+          sessions: {}
+        });
+      }
+      const entry = map.get(ym)!;
+      entry.dates.add(h.date);
+      if (h.status === 'leave') entry.leaves++;
+      const st = h.session_type.toLowerCase();
+      if (!entry.sessions[st]) entry.sessions[st] = { conducted: 0, attended: 0 };
+      entry.sessions[st].conducted++;
+      if (h.status === 'present' || h.status === 'late') entry.sessions[st].attended++;
+    });
+
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([_, v]) => {
+        const sessRecord: Record<string, { conducted: number; attended: number; percentage: number }> = {};
+        let totalC = 0;
+        let totalA = 0;
+        for (const [sKey, sVal] of Object.entries(v.sessions)) {
+          totalC += sVal.conducted;
+          totalA += sVal.attended;
+          sessRecord[sKey] = {
+            conducted: sVal.conducted,
+            attended: sVal.attended,
+            percentage: sVal.conducted > 0 ? Math.round((sVal.attended / sVal.conducted) * 100) : 0
+          };
+        }
+        return {
+          year: v.year,
+          period: v.period,
+          month_key: v.month_key,
+          total_days: v.dates.size,
+          leave_days: v.leaves,
+          sessions: sessRecord,
+          overall_conducted: totalC,
+          overall_attended: totalA,
+          overall_percentage: totalC > 0 ? Math.round((totalA / totalC) * 100) : 0
+        };
+      });
+  };
+
+  const getSummaryBreakdown = (): MonthBreakdownItem[] => {
+    if (summary?.monthly_breakdown && summary.monthly_breakdown.length > 0) {
+      return summary.monthly_breakdown;
+    }
+
+    const map = new Map<string, {
+      year: number;
+      period: string;
+      month_key: string;
+      total_days: number;
+      leave_days: number;
+      sessions: Record<string, { conducted: number; attended: number }>;
+    }>();
+
+    students.forEach((stu) => {
+      const sBreakdown = getStudentBreakdown(stu);
+      sBreakdown.forEach((sb) => {
+        if (!map.has(sb.month_key)) {
+          map.set(sb.month_key, {
+            year: sb.year,
+            period: sb.period,
+            month_key: sb.month_key,
+            total_days: 0,
+            leave_days: 0,
+            sessions: {}
+          });
+        }
+        const agg = map.get(sb.month_key)!;
+        agg.total_days += sb.total_days;
+        agg.leave_days += sb.leave_days;
+        for (const [sk, sv] of Object.entries(sb.sessions)) {
+          if (!agg.sessions[sk]) agg.sessions[sk] = { conducted: 0, attended: 0 };
+          agg.sessions[sk].conducted += sv.conducted;
+          agg.sessions[sk].attended += sv.attended;
+        }
+      });
+    });
+
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([_, v]) => {
+        const sessRecord: Record<string, { conducted: number; attended: number; percentage: number }> = {};
+        let totalC = 0;
+        let totalA = 0;
+        for (const [sKey, sVal] of Object.entries(v.sessions)) {
+          totalC += sVal.conducted;
+          totalA += sVal.attended;
+          sessRecord[sKey] = {
+            conducted: sVal.conducted,
+            attended: sVal.attended,
+            percentage: sVal.conducted > 0 ? Math.round((sVal.attended / sVal.conducted) * 100) : 0
+          };
+        }
+        return {
+          year: v.year,
+          period: v.period,
+          month_key: v.month_key,
+          total_days: v.total_days,
+          leave_days: v.leave_days,
+          sessions: sessRecord,
+          overall_conducted: totalC,
+          overall_attended: totalA,
+          overall_percentage: totalC > 0 ? Math.round((totalA / totalC) * 100) : 0
+        };
+      });
+  };
+
+  // Displayed Rows for the Main Screen Month-Wise Matrix (matching spreadsheet in Image 2 & 3)
+  const displayedMatrixRows = useMemo(() => {
+    if (matrixStudentFilter !== 'all') {
+      const stu = students.find((s) => s.name === matrixStudentFilter || String(s.student_id) === matrixStudentFilter);
+      return getStudentBreakdown(stu);
+    }
+    if (matrixRoomFilter !== 'all') {
+      const roomStudents = students.filter((s) => String(s.room_number) === matrixRoomFilter);
+      if (roomStudents.length === 1) {
+        return getStudentBreakdown(roomStudents[0]);
+      }
+      const map = new Map<string, MonthBreakdownItem>();
+      roomStudents.forEach((stu) => {
+        const sBreakdown = getStudentBreakdown(stu);
+        sBreakdown.forEach((sb) => {
+          if (!map.has(sb.month_key)) {
+            map.set(sb.month_key, { ...sb, sessions: { ...sb.sessions } });
+          } else {
+            const item = map.get(sb.month_key)!;
+            item.total_days += sb.total_days;
+            item.leave_days += sb.leave_days;
+            item.overall_conducted += sb.overall_conducted;
+            item.overall_attended += sb.overall_attended;
+            for (const [sk, sv] of Object.entries(sb.sessions)) {
+              if (!item.sessions[sk]) {
+                item.sessions[sk] = { ...sv };
+              } else {
+                item.sessions[sk].conducted += sv.conducted;
+                item.sessions[sk].attended += sv.attended;
+              }
+            }
+          }
+        });
+      });
+      return Array.from(map.values()).map((item) => {
+        for (const [_, sv] of Object.entries(item.sessions)) {
+          sv.percentage = sv.conducted > 0 ? Math.round((sv.attended / sv.conducted) * 100) : 0;
+        }
+        item.overall_percentage = item.overall_conducted > 0 ? Math.round((item.overall_attended / item.overall_conducted) * 100) : 0;
+        return item;
+      });
+    }
+    return getSummaryBreakdown();
+  }, [matrixStudentFilter, matrixRoomFilter, students, summary]);
+
   // Filtered & Sorted Students
   const filteredStudents = useMemo(() => {
     return students
       .filter((stu) => {
-        // Search Filter
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase().trim();
           const matchName = stu.name.toLowerCase().includes(q);
@@ -459,7 +738,6 @@ export const AttendanceReportsView: React.FC = () => {
           if (!matchName && !matchPhone && !matchRoom && !matchCode) return false;
         }
 
-        // Status Filter
         if (statusFilter === 'present') return stu.sessions_attended > 0;
         if (statusFilter === 'absent') return stu.sessions_attended === 0;
         if (statusFilter === 'late') return stu.late_arrivals > 0;
@@ -500,11 +778,21 @@ export const AttendanceReportsView: React.FC = () => {
     setPreviewRecipient(recipient);
     setIsEditingTemplate(false);
     setSaveSuccessMessage(null);
+    setActivePreviewTab('report_card');
     const key = recipient === 'parent' ? 'parent_report' : 'student_report';
     setActiveTemplateText(templates[key] || (recipient === 'parent' ? DEFAULT_PARENT_TEMPLATE : DEFAULT_STUDENT_TEMPLATE));
     if (selectedStudentIds.length > 0) {
       setPreviewStudentId(selectedStudentIds[0]);
     }
+    setPreviewModalOpen(true);
+  };
+
+  // Direct View Report for a specific student row
+  const handleViewStudentReport = (stu: StudentDetail) => {
+    setSelectedStudentIds([stu.student_id]);
+    setPreviewStudentId(stu.student_id);
+    setActivePreviewTab('report_card');
+    setPreviewRecipient('parent');
     setPreviewModalOpen(true);
   };
 
@@ -561,6 +849,91 @@ export const AttendanceReportsView: React.FC = () => {
     setActiveTemplateText(defaultText);
   };
 
+  // Render and capture high-DPI visual report card as PNG base64
+  const captureReportCardImage = async (): Promise<string | null> => {
+    if (!reportCardRef.current) return null;
+    try {
+      const canvas = await html2canvas(reportCardRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      return canvas.toDataURL('image/png');
+    } catch (err) {
+      console.error('Failed to capture report card canvas:', err);
+      return null;
+    }
+  };
+
+  // Download visual report card image as PNG file
+  const handleDownloadReportImage = async () => {
+    setIsExportingImage(true);
+    try {
+      const imgData = await captureReportCardImage();
+      if (!imgData) {
+        alert('Could not render report card image. Please ensure the card is visible.');
+        return;
+      }
+      const stuName = (currentPreviewStudent?.name || 'Student').replace(/\s+/g, '_');
+      const link = document.createElement('a');
+      link.download = `Attendance_Report_${stuName}_${startDate}_to_${endDate}.png`;
+      link.href = imgData;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      alert('Error generating image: ' + err.message);
+    } finally {
+      setIsExportingImage(false);
+    }
+  };
+
+  // Copy visual report card image to clipboard
+  const handleCopyReportImage = async () => {
+    if (!reportCardRef.current) return;
+    setIsExportingImage(true);
+    try {
+      const canvas = await html2canvas(reportCardRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      canvas.toBlob(async (blob) => {
+        if (blob && (navigator.clipboard as any)?.write) {
+          try {
+            await (navigator.clipboard as any).write([
+              new (window as any).ClipboardItem({ 'image/png': blob })
+            ]);
+            alert('Visual report card image copied to clipboard! You can paste it directly into WhatsApp or documents.');
+          } catch (clipErr) {
+            console.warn('Clipboard write failed, downloading file instead:', clipErr);
+            const link = document.createElement('a');
+            link.download = `Attendance_Report_${(currentPreviewStudent?.name || 'Student').replace(/\s+/g, '_')}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+          }
+        } else {
+          alert('Clipboard image copy not supported in this browser. Downloading PNG image instead.');
+          const link = document.createElement('a');
+          link.download = `Attendance_Report_${(currentPreviewStudent?.name || 'Student').replace(/\s+/g, '_')}.png`;
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        }
+        setIsExportingImage(false);
+      }, 'image/png');
+    } catch (err: any) {
+      alert('Error exporting image: ' + err.message);
+      setIsExportingImage(false);
+    }
+  };
+
+  // Print official report card
+  const handlePrintReport = () => {
+    window.print();
+  };
+
   // Dispatch Notifications
   const handleSendNotifications = async () => {
     if (selectedStudentIds.length === 0) return;
@@ -569,7 +942,15 @@ export const AttendanceReportsView: React.FC = () => {
     const idempotencyKey = `send_${previewRecipient}_${sessionType}_${startDate}_${Date.now()}`;
 
     try {
-      const payload = {
+      let reportImageBase64: string | undefined = undefined;
+      if (attachReportImage && reportCardRef.current) {
+        const captured = await captureReportCardImage();
+        if (captured) {
+          reportImageBase64 = captured;
+        }
+      }
+
+      const payload: any = {
         recipient_type: previewRecipient,
         student_ids: selectedStudentIds,
         report_params: {
@@ -579,7 +960,8 @@ export const AttendanceReportsView: React.FC = () => {
         },
         custom_note: customNote.trim() || undefined,
         custom_template: activeTemplateText,
-        idempotency_key: idempotencyKey
+        idempotency_key: idempotencyKey,
+        report_image: reportImageBase64
       };
 
       const res = await apiClient.post('/attendance/reports/send-notifications', payload);
@@ -641,6 +1023,50 @@ export const AttendanceReportsView: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  // Export Month Matrix CSV
+  const handleExportMatrixCSV = () => {
+    if (!displayedMatrixRows || displayedMatrixRows.length === 0) return;
+
+    const sessionHeaderNames = activeSessionKeys.map((k) => {
+      const opt = SESSION_OPTIONS.find((o) => o.key === k);
+      return opt ? opt.label : k.toUpperCase();
+    });
+
+    const headers = [
+      'Year',
+      'Period',
+      'Total Days',
+      'Leave Days',
+      ...sessionHeaderNames.flatMap((sn) => [`${sn} Conducted`, `${sn} Attended`, `${sn} %`]),
+      'Overall Conducted',
+      'Overall Attended',
+      'Overall %'
+    ];
+
+    const rows = displayedMatrixRows.map((r) => [
+      r.year,
+      `"${r.period}"`,
+      r.total_days,
+      r.leave_days,
+      ...activeSessionKeys.flatMap((k) => {
+        const s = r.sessions[k] || { conducted: 0, attended: 0, percentage: 0 };
+        return [s.conducted, s.attended, `${s.percentage}%`];
+      }),
+      r.overall_conducted,
+      r.overall_attended,
+      `${r.overall_percentage}%`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Month_Wise_Attendance_Matrix_${startDate}_to_${endDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Donut chart colors: On-Time, Late, Absent, On Leave
   const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#0ea5e9'];
 
@@ -657,7 +1083,7 @@ export const AttendanceReportsView: React.FC = () => {
     return students.filter((s) => selectedStudentIds.includes(s.student_id));
   }, [students, selectedStudentIds]);
 
-  // Ensure previewStudentId is pointing to an active selected student
+  // Ensure previewStudentId points to an active selected student
   useEffect(() => {
     if (selectedStudentsList.length > 0) {
       if (!previewStudentId || !selectedStudentsList.some((s) => s.student_id === previewStudentId)) {
@@ -691,6 +1117,14 @@ export const AttendanceReportsView: React.FC = () => {
     setPreviewStudentId(selectedStudentsList[newIdx].student_id);
   };
 
+  // Performance Rating calculation
+  const getRatingBadge = (pct: number) => {
+    if (pct >= 90) return { label: '🌟 Excellent', color: '#15803d', bg: '#dcfce7' };
+    if (pct >= 75) return { label: '✓ Good Performance', color: '#047857', bg: '#ecfdf5' };
+    if (pct >= 50) return { label: '⚠️ Average / Improvement Needed', color: '#b45309', bg: '#fef3c7' };
+    return { label: '🚨 Needs Immediate Attention', color: '#b91c1c', bg: '#fee2e2' };
+  };
+
   return (
     <div className="attendance-reports-container">
       {/* 1. Control & Filter Panel */}
@@ -700,34 +1134,48 @@ export const AttendanceReportsView: React.FC = () => {
             <Sparkles size={24} style={{ color: '#4f46e5' }} />
             <div>
               <h3>Attendance Reports & Analytics</h3>
-              <span>Fetch live HSH verified records for the last 6 months</span>
+              <span>Fetch live HSH verified records for the last 6 months with multi-session support</span>
             </div>
           </div>
-          <button
-            className="btn-secondary"
-            onClick={handleExportCSV}
-            disabled={students.length === 0}
-            title="Download formatted CSV report"
-          >
-            <Download size={16} />
-            <span>Export CSV</span>
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="btn-secondary"
+              onClick={mainTableViewMode === 'students' ? handleExportCSV : handleExportMatrixCSV}
+              disabled={students.length === 0}
+              title="Download formatted CSV report"
+            >
+              <Download size={16} />
+              <span>{mainTableViewMode === 'students' ? 'Export Student CSV' : 'Export Matrix CSV'}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Session Type Selector Pills */}
+        {/* Multi-Session Type Selector Pills */}
         <div className="filter-input-group">
-          <label>Session Type</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <label>Session Type (Multi-Select Supported)</label>
+            <div style={{ fontSize: '0.785rem', color: '#4f46e5', fontWeight: 700, background: '#eef2ff', padding: '2px 10px', borderRadius: '12px' }}>
+              Selected: {sessionLabel}
+            </div>
+          </div>
           <div className="session-pills-row">
-            {SESSION_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                className={`session-pill-btn ${sessionType === opt.key ? 'active' : ''}`}
-                onClick={() => setSessionType(opt.key)}
-              >
-                <span>{opt.emoji}</span>
-                <span>{opt.label}</span>
-              </button>
-            ))}
+            {SESSION_OPTIONS.map((opt) => {
+              const isAll = opt.key === 'all';
+              const isSelected = isAll ? selectedSessions.includes('all') : (!selectedSessions.includes('all') && selectedSessions.includes(opt.key));
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  className={`session-pill-btn ${isSelected ? 'active' : ''}`}
+                  onClick={() => handleToggleSession(opt.key)}
+                  title={isAll ? 'Select all sessions' : `Toggle ${opt.label}`}
+                >
+                  <span>{opt.emoji}</span>
+                  <span>{opt.label}</span>
+                  {isSelected && <Check size={14} style={{ marginLeft: '2px' }} />}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -1122,7 +1570,7 @@ export const AttendanceReportsView: React.FC = () => {
             className="btn-secondary"
             onClick={() => handleOpenPreview('parent')}
             disabled={selectedStudentIds.length === 0}
-            title="Preview attendance report before sending"
+            title="Preview attendance report card & message before sending"
           >
             <Eye size={16} />
             <span>View Report</span>
@@ -1152,218 +1600,528 @@ export const AttendanceReportsView: React.FC = () => {
         </div>
       </section>
 
-      {/* 5. Search & Filters Bar */}
-      <section className="search-filter-row">
-        <div className="search-box-wrap">
-          <Search size={16} className="search-icon-inside" />
-          <input
-            type="text"
-            className="search-input-field"
-            placeholder="Search by student name, phone number, room, or code..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        <div className="filter-pills-wrap">
+      {/* 5. Main Screen View Switcher: Student Table vs Month-Wise Matrix */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginTop: '4px' }}>
+        <div className="view-mode-tabs">
           <button
-            className={`status-pill-btn ${statusFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('all')}
+            type="button"
+            className={`view-mode-tab-btn ${mainTableViewMode === 'students' ? 'active' : ''}`}
+            onClick={() => setMainTableViewMode('students')}
           >
-            All Students ({students.length})
+            <Users size={16} />
+            <span>👥 Student-Wise Attendance Table</span>
           </button>
           <button
-            className={`status-pill-btn ${statusFilter === 'present' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('present')}
+            type="button"
+            className={`view-mode-tab-btn ${mainTableViewMode === 'month_matrix' ? 'active' : ''}`}
+            onClick={() => setMainTableViewMode('month_matrix')}
           >
-            Present (≥1)
-          </button>
-          <button
-            className={`status-pill-btn ${statusFilter === 'absent' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('absent')}
-          >
-            Absent (0)
-          </button>
-          <button
-            className={`status-pill-btn ${statusFilter === 'late' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('late')}
-          >
-            Late Arrivals
-          </button>
-          <button
-            className={`status-pill-btn ${statusFilter === 'low' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('low')}
-          >
-            Low Attendance (&lt;75%)
-          </button>
-          <button
-            className={`status-pill-btn ${statusFilter === 'leave' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('leave')}
-          >
-            On Leave
+            <FileSpreadsheet size={16} />
+            <span>📅 Month-Wise Attendance Matrix (Spreadsheet View)</span>
           </button>
         </div>
 
-        <select
-          className="filter-select"
-          style={{ width: 'auto', minWidth: '180px' }}
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as any)}
-        >
-          <option value="pct_desc">Attendance % (High to Low)</option>
-          <option value="pct_asc">Attendance % (Low to High)</option>
-          <option value="name_asc">Student Name (A - Z)</option>
-          <option value="name_desc">Student Name (Z - A)</option>
-          <option value="room_asc">Room Number (Ascending)</option>
-          <option value="late_desc">Late Arrivals (Highest First)</option>
-        </select>
-      </section>
+        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+          Showing period: <strong style={{ color: '#0f172a' }}>{startDate} to {endDate}</strong> • Sessions: <strong style={{ color: '#4f46e5' }}>{sessionLabel}</strong>
+        </div>
+      </div>
 
-      {/* 6. Student-Wise Attendance Table */}
-      <section className="table-card">
-        <div className="table-responsive">
-          <table className="attendance-table">
-            <thead>
-              <tr>
-                <th style={{ width: '40px', textAlign: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedStudentIds.length === filteredStudents.length && filteredStudents.length > 0}
-                    onChange={handleSelectAll}
-                  />
-                </th>
-                <th>Student</th>
-                <th>Room</th>
-                <th>Phone Number</th>
-                <th style={{ textAlign: 'center' }}>Conducted</th>
-                <th style={{ textAlign: 'center' }}>Attended</th>
-                <th style={{ textAlign: 'center' }}>Absent</th>
-                <th style={{ textAlign: 'center' }}>Late</th>
-                <th style={{ textAlign: 'center' }}>On-Time</th>
-                <th style={{ textAlign: 'center' }}>Attendance %</th>
-                <th>Last Attendance</th>
-                <th style={{ textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && students.length === 0 ? (
-                <tr>
-                  <td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-                    <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px' }} />
-                    <div>Loading attendance data for selected period...</div>
-                  </td>
-                </tr>
-              ) : filteredStudents.length === 0 ? (
-                <tr>
-                  <td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-                    No students match your selected filters.
-                  </td>
-                </tr>
-              ) : (
-                filteredStudents.map((stu) => {
-                  const isSelected = selectedStudentIds.includes(stu.student_id);
-                  const pct = stu.attendance_percentage;
-                  let badgeClass = 'pct-badge-high';
-                  if (pct < 50) badgeClass = 'pct-badge-low';
-                  else if (pct < 75) badgeClass = 'pct-badge-mid';
+      {/* 6A. Student-Wise Attendance Table View */}
+      {mainTableViewMode === 'students' && (
+        <>
+          {/* Search & Filters Bar */}
+          <section className="search-filter-row">
+            <div className="search-box-wrap">
+              <Search size={16} className="search-icon-inside" />
+              <input
+                type="text"
+                className="search-input-field"
+                placeholder="Search by student name, phone number, room, or code..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
 
-                  return (
-                    <tr key={stu.student_id} style={isSelected ? { background: '#f8fafc' } : {}}>
-                      <td style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleToggleStudent(stu.student_id)}
-                        />
-                      </td>
-                      <td>
-                        <div className="student-info-cell">
-                          <div className="student-avatar">
-                            {stu.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="student-name-text">{stu.name}</div>
-                            <div className="student-code-text">Code: {stu.student_code}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span style={{ fontWeight: 600 }}>{stu.room_number || 'N/A'}</span>
-                      </td>
-                      <td>
-                        <div style={{ fontSize: '0.825rem' }}>{stu.phone_number || '—'}</div>
-                        {stu.parent_phone && (
-                          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Parent: {stu.parent_phone}</div>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{stu.sessions_conducted}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#15803d' }}>
-                        {stu.sessions_attended}
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: stu.total_absences > 0 ? '#b91c1c' : '#64748b' }}>
-                        {stu.total_absences}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        {stu.late_arrivals > 0 ? (
-                          <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#fef3c7', color: '#b45309', fontWeight: 700 }}>
-                            {stu.late_arrivals}
-                          </span>
-                        ) : (
-                          <span style={{ color: '#94a3b8' }}>0</span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#059669' }}>
-                        {stu.on_time_count}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span className={`pct-badge ${badgeClass}`}>{pct}%</span>
-                      </td>
-                      <td>
-                        {stu.last_attendance_date ? (
-                          <div style={{ fontSize: '0.8rem' }}>
-                            <div>{stu.last_attendance_date}</div>
-                            {stu.last_attendance_time && (
-                              <div style={{ color: '#64748b', fontSize: '0.75rem' }}>{stu.last_attendance_time}</div>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Never</span>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', gap: '6px' }}>
-                          <button
-                            className="btn-secondary"
-                            style={{ height: '30px', padding: '0 8px', fontSize: '0.75rem' }}
-                            onClick={() => setHistoryModalStudent(stu)}
-                            title="View student session history"
-                          >
-                            <History size={14} />
-                            <span>History</span>
-                          </button>
-                        </div>
+            <div className="filter-pills-wrap">
+              <button
+                className={`status-pill-btn ${statusFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('all')}
+              >
+                All Students ({students.length})
+              </button>
+              <button
+                className={`status-pill-btn ${statusFilter === 'present' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('present')}
+              >
+                Present (≥1)
+              </button>
+              <button
+                className={`status-pill-btn ${statusFilter === 'absent' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('absent')}
+              >
+                Absent (0)
+              </button>
+              <button
+                className={`status-pill-btn ${statusFilter === 'late' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('late')}
+              >
+                Late Arrivals
+              </button>
+              <button
+                className={`status-pill-btn ${statusFilter === 'low' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('low')}
+              >
+                Low Attendance (&lt;75%)
+              </button>
+              <button
+                className={`status-pill-btn ${statusFilter === 'leave' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('leave')}
+              >
+                On Leave
+              </button>
+            </div>
+
+            <select
+              className="filter-select"
+              style={{ width: 'auto', minWidth: '180px' }}
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+            >
+              <option value="pct_desc">Attendance % (High to Low)</option>
+              <option value="pct_asc">Attendance % (Low to High)</option>
+              <option value="name_asc">Student Name (A - Z)</option>
+              <option value="name_desc">Student Name (Z - A)</option>
+              <option value="room_asc">Room Number (Ascending)</option>
+              <option value="late_desc">Late Arrivals (Highest First)</option>
+            </select>
+          </section>
+
+          <section className="table-card">
+            <div className="table-responsive">
+              <table className="attendance-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedStudentIds.length === filteredStudents.length && filteredStudents.length > 0}
+                        onChange={handleSelectAll}
+                      />
+                    </th>
+                    <th>Student</th>
+                    <th>Room</th>
+                    <th>Phone Number</th>
+                    <th style={{ textAlign: 'center' }}>Conducted</th>
+                    <th style={{ textAlign: 'center' }}>Attended</th>
+                    <th style={{ textAlign: 'center' }}>Absent</th>
+                    <th style={{ textAlign: 'center' }}>Late</th>
+                    <th style={{ textAlign: 'center' }}>On-Time</th>
+                    <th style={{ textAlign: 'center' }}>Attendance %</th>
+                    <th>Last Attendance</th>
+                    <th style={{ textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading && students.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                        <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px' }} />
+                        <div>Loading attendance data for selected period...</div>
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                  ) : filteredStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                        No students match your selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredStudents.map((stu) => {
+                      const isSelected = selectedStudentIds.includes(stu.student_id);
+                      const pct = stu.attendance_percentage;
+                      let badgeClass = 'pct-badge-high';
+                      if (pct < 50) badgeClass = 'pct-badge-low';
+                      else if (pct < 75) badgeClass = 'pct-badge-mid';
 
-      {/* 7. Dedicated View Report & Pre-Send Preview Modal */}
+                      return (
+                        <tr key={stu.student_id} style={isSelected ? { background: '#f8fafc' } : {}}>
+                          <td style={{ textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleStudent(stu.student_id)}
+                            />
+                          </td>
+                          <td>
+                            <div className="student-info-cell">
+                              <div className="student-avatar">
+                                {stu.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="student-name-text">{stu.name}</div>
+                                <div className="student-code-text">Code: {stu.student_code}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 600 }}>{stu.room_number || 'N/A'}</span>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '0.825rem' }}>{stu.phone_number || '—'}</div>
+                            {stu.parent_phone && (
+                              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Parent: {stu.parent_phone}</div>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{stu.sessions_conducted}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 700, color: '#15803d' }}>
+                            {stu.sessions_attended}
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: stu.total_absences > 0 ? '#b91c1c' : '#64748b' }}>
+                            {stu.total_absences}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {stu.late_arrivals > 0 ? (
+                              <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#fef3c7', color: '#b45309', fontWeight: 700 }}>
+                                {stu.late_arrivals}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>0</span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: '#059669' }}>
+                            {stu.on_time_count}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`pct-badge ${badgeClass}`}>{pct}%</span>
+                          </td>
+                          <td>
+                            {stu.last_attendance_date ? (
+                              <div style={{ fontSize: '0.8rem' }}>
+                                <div>{stu.last_attendance_date}</div>
+                                {stu.last_attendance_time && (
+                                  <div style={{ color: '#64748b', fontSize: '0.75rem' }}>{stu.last_attendance_time}</div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Never</span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', gap: '6px' }}>
+                              <button
+                                className="btn-secondary"
+                                style={{ height: '30px', padding: '0 8px', fontSize: '0.75rem', background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca', fontWeight: 600 }}
+                                onClick={() => handleViewStudentReport(stu)}
+                                title="View official attendance report card"
+                              >
+                                <Eye size={14} />
+                                <span>View Report</span>
+                              </button>
+                              <button
+                                className="btn-secondary"
+                                style={{ height: '30px', padding: '0 8px', fontSize: '0.75rem' }}
+                                onClick={() => setHistoryModalStudent(stu)}
+                                title="View student session history"
+                              >
+                                <History size={14} />
+                                <span>History</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* 6B. Month-Wise Attendance Matrix (Spreadsheet View matching Images 2 & 3) */}
+      {mainTableViewMode === 'month_matrix' && (
+        <section className="table-card" style={{ padding: '20px' }}>
+          {/* Header Controls with Dark Pills matching User's Uploaded Screenshot */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              {/* fullName filter pill */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#0f172a', color: '#ffffff', padding: '6px 16px', borderRadius: '9999px', fontSize: '0.825rem', fontWeight: 600, boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
+                <Filter size={14} style={{ color: '#94a3b8' }} />
+                <span>fullName</span>
+                <select
+                  style={{ background: 'transparent', color: '#ffffff', border: 'none', outline: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.825rem' }}
+                  value={matrixStudentFilter}
+                  onChange={(e) => setMatrixStudentFilter(e.target.value)}
+                >
+                  <option value="all" style={{ color: '#0f172a' }}>All (Hostel-Wide Aggregate)</option>
+                  {students.map((s) => (
+                    <option key={s.student_id} value={s.name} style={{ color: '#0f172a' }}>
+                      {s.name} (Room {s.room_number || 'N/A'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* room filter pill */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#0f172a', color: '#ffffff', padding: '6px 16px', borderRadius: '9999px', fontSize: '0.825rem', fontWeight: 600, boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
+                <Home size={14} style={{ color: '#94a3b8' }} />
+                <span>room</span>
+                <select
+                  style={{ background: 'transparent', color: '#ffffff', border: 'none', outline: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.825rem' }}
+                  value={matrixRoomFilter}
+                  onChange={(e) => setMatrixRoomFilter(e.target.value)}
+                >
+                  <option value="all" style={{ color: '#0f172a' }}>All</option>
+                  {availableRooms.map((r) => (
+                    <option key={r} value={r} style={{ color: '#0f172a' }}>
+                      Room {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(matrixStudentFilter !== 'all' || matrixRoomFilter !== 'all') && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ height: '32px', padding: '0 10px', fontSize: '0.75rem' }}
+                  onClick={() => {
+                    setMatrixStudentFilter('all');
+                    setMatrixRoomFilter('all');
+                  }}
+                >
+                  Reset Filters
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button className="btn-secondary" onClick={handleExportMatrixCSV} title="Export spreadsheet to CSV">
+                <Download size={14} />
+                <span>Export Matrix CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Month-Wise Matrix Spreadsheet Table */}
+          <div className="report-matrix-table-wrap">
+            <table className="report-matrix-table">
+              <thead>
+                {/* Header Category Row matching User's Color-Coded Sheet */}
+                <tr>
+                  <th className="th-cat-year" colSpan={1}>Year</th>
+                  <th className="th-cat-year" colSpan={1}>Period</th>
+                  <th className="th-cat-dates" colSpan={2}>Dates</th>
+                  {activeSessionKeys.map((sKey) => {
+                    const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                    const sName = sOpt ? sOpt.label : sKey.toUpperCase();
+                    if (sKey === 'aarti') {
+                      return (
+                        <React.Fragment key={sKey}>
+                          <th className="th-cat-aarti">AartiAttendance</th>
+                          <th className="th-cat-aarti">AartiPercentage</th>
+                        </React.Fragment>
+                      );
+                    }
+                    if (sKey === 'sabha') {
+                      return (
+                        <React.Fragment key={sKey}>
+                          <th className="th-cat-sabha">Sabhas</th>
+                          <th className="th-cat-sabha">SabhaAttendance</th>
+                          <th className="th-cat-sabha">SabhaPercentage</th>
+                        </React.Fragment>
+                      );
+                    }
+                    return (
+                      <React.Fragment key={sKey}>
+                        <th className={getSessionHeaderClass(sKey)}>{sName} Conducted</th>
+                        <th className={getSessionHeaderClass(sKey)}>{sName} Attended</th>
+                        <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
+                      </React.Fragment>
+                    );
+                  })}
+                  <th className="th-cat-year" colSpan={2}>Overall Attendance</th>
+                </tr>
+
+                {/* Sub-Header Column Labels */}
+                <tr>
+                  <th className="th-cat-year">Year</th>
+                  <th className="th-cat-year">Period</th>
+                  <th className="th-cat-dates">Total Days</th>
+                  <th className="th-cat-dates">Leave Days</th>
+                  {activeSessionKeys.map((sKey) => {
+                    const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                    const sName = sOpt ? sOpt.label : sKey.toUpperCase();
+                    if (sKey === 'aarti') {
+                      return (
+                        <React.Fragment key={sKey}>
+                          <th className="th-cat-aarti">Aarti Attended</th>
+                          <th className="th-cat-aarti">Aarti %</th>
+                        </React.Fragment>
+                      );
+                    }
+                    if (sKey === 'sabha') {
+                      return (
+                        <React.Fragment key={sKey}>
+                          <th className="th-cat-sabha">Total Sabha</th>
+                          <th className="th-cat-sabha">Attended Sabha</th>
+                          <th className="th-cat-sabha">Sabha %</th>
+                        </React.Fragment>
+                      );
+                    }
+                    return (
+                      <React.Fragment key={sKey}>
+                        <th className={getSessionHeaderClass(sKey)}>Total {sName}</th>
+                        <th className={getSessionHeaderClass(sKey)}>Attended</th>
+                        <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
+                      </React.Fragment>
+                    );
+                  })}
+                  <th className="th-cat-year">Conducted</th>
+                  <th className="th-cat-year">Overall %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedMatrixRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6 + activeSessionKeys.length * 3} style={{ padding: '36px', color: '#64748b' }}>
+                      No month-wise attendance data found for the selected period.
+                    </td>
+                  </tr>
+                ) : (
+                  displayedMatrixRows.map((row, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
+                      <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
+                      <td style={{ background: '#f0f9ff' }}>{row.total_days.toLocaleString()}</td>
+                      <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
+                        {row.leave_days.toLocaleString()}
+                      </td>
+                      {activeSessionKeys.map((sKey) => {
+                        const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
+                        const sPct = sData.percentage;
+                        const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
+
+                        if (sKey === 'aarti') {
+                          return (
+                            <React.Fragment key={sKey}>
+                              <td style={{ background: '#fffbeb', fontWeight: 700, color: '#9a3412' }}>
+                                {sData.attended.toLocaleString()}
+                              </td>
+                              <td style={{ background: '#fffbeb', fontWeight: 800, color: pctColor }}>
+                                {sPct}%
+                              </td>
+                            </React.Fragment>
+                          );
+                        }
+
+                        if (sKey === 'sabha') {
+                          return (
+                            <React.Fragment key={sKey}>
+                              <td style={{ background: '#f0fdf4' }}>{sData.conducted.toLocaleString()}</td>
+                              <td style={{ background: '#f0fdf4', fontWeight: 700, color: '#166534' }}>
+                                {sData.attended.toLocaleString()}
+                              </td>
+                              <td style={{ background: '#f0fdf4', fontWeight: 800, color: pctColor }}>
+                                {sPct}%
+                              </td>
+                            </React.Fragment>
+                          );
+                        }
+
+                        return (
+                          <React.Fragment key={sKey}>
+                            <td style={{ background: '#faf5ff' }}>{sData.conducted.toLocaleString()}</td>
+                            <td style={{ background: '#faf5ff', fontWeight: 700, color: '#6b21a8' }}>
+                              {sData.attended.toLocaleString()}
+                            </td>
+                            <td style={{ background: '#faf5ff', fontWeight: 800, color: pctColor }}>
+                              {sPct}%
+                            </td>
+                          </React.Fragment>
+                        );
+                      })}
+                      <td style={{ fontWeight: 600, background: '#f8fafc' }}>
+                        {row.overall_conducted.toLocaleString()}
+                      </td>
+                      <td style={{ fontWeight: 800, color: row.overall_percentage >= 75 ? '#15803d' : '#d97706', background: '#f8fafc' }}>
+                        {row.overall_percentage}%
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {displayedMatrixRows.length > 0 && (
+                <tfoot>
+                  <tr>
+                    <td colSpan={2} style={{ textAlign: 'right', fontWeight: 800 }}>TOTAL / AVERAGE</td>
+                    <td style={{ fontWeight: 800 }}>
+                      {displayedMatrixRows.reduce((acc, r) => acc + r.total_days, 0).toLocaleString()}
+                    </td>
+                    <td style={{ fontWeight: 800, color: '#0284c7' }}>
+                      {displayedMatrixRows.reduce((acc, r) => acc + r.leave_days, 0).toLocaleString()}
+                    </td>
+                    {activeSessionKeys.map((sKey) => {
+                      const totalAtt = displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.attended || 0), 0);
+                      const totalCond = displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.conducted || 0), 0);
+                      const avgPct = totalCond > 0 ? Math.round((totalAtt / totalCond) * 100) : 0;
+
+                      if (sKey === 'aarti') {
+                        return (
+                          <React.Fragment key={sKey}>
+                            <td style={{ fontWeight: 800, color: '#9a3412' }}>{totalAtt.toLocaleString()}</td>
+                            <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                          </React.Fragment>
+                        );
+                      }
+                      if (sKey === 'sabha') {
+                        return (
+                          <React.Fragment key={sKey}>
+                            <td style={{ fontWeight: 800 }}>{totalCond.toLocaleString()}</td>
+                            <td style={{ fontWeight: 800, color: '#166534' }}>{totalAtt.toLocaleString()}</td>
+                            <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                          </React.Fragment>
+                        );
+                      }
+                      return (
+                        <React.Fragment key={sKey}>
+                          <td style={{ fontWeight: 800 }}>{totalCond.toLocaleString()}</td>
+                          <td style={{ fontWeight: 800, color: '#6b21a8' }}>{totalAtt.toLocaleString()}</td>
+                          <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                        </React.Fragment>
+                      );
+                    })}
+                    <td style={{ fontWeight: 800 }}>
+                      {displayedMatrixRows.reduce((acc, r) => acc + r.overall_conducted, 0).toLocaleString()}
+                    </td>
+                    <td style={{ fontWeight: 800, color: '#4f46e5' }}>
+                      {(() => {
+                        const allCond = displayedMatrixRows.reduce((acc, r) => acc + r.overall_conducted, 0);
+                        const allAtt = displayedMatrixRows.reduce((acc, r) => acc + r.overall_attended, 0);
+                        return allCond > 0 ? Math.round((allAtt / allCond) * 100) : 0;
+                      })()}%
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* 7. Dedicated View Report & Pre-Send Preview Modal (Report Card & Image & Template) */}
       {previewModalOpen &&
         createPortal(
           <div className="modal-overlay" onClick={() => setPreviewModalOpen(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content" style={{ maxWidth: '1000px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <Eye size={22} style={{ color: '#4f46e5' }} />
                   <div>
-                    <h3>Attendance Report Preview</h3>
+                    <h3>Attendance Report & Notification Center</h3>
                     <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                      Review statistics & recipient target before dispatching
+                      Official visual report card preview, image export & dispatch options
                     </span>
                   </div>
                 </div>
@@ -1372,10 +2130,10 @@ export const AttendanceReportsView: React.FC = () => {
                 </button>
               </div>
 
-              <div className="modal-body">
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Target Recipient Selector */}
-                <div style={{ display: 'flex', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600 }}>
+                <div style={{ display: 'flex', gap: '16px', background: '#f8fafc', padding: '14px 18px', borderRadius: '12px', border: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}>
                     <input
                       type="radio"
                       name="recipient"
@@ -1385,7 +2143,7 @@ export const AttendanceReportsView: React.FC = () => {
                     />
                     <span>👨‍👩‍👧 Send to Parent (Dispatches to Parent / Father Phone)</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}>
                     <input
                       type="radio"
                       name="recipient"
@@ -1397,85 +2155,75 @@ export const AttendanceReportsView: React.FC = () => {
                   </label>
                 </div>
 
-                {/* Scope Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-                  <div style={{ background: '#e0e7ff', padding: '12px', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#4338ca', fontWeight: 700 }}>SELECTED RECIPIENTS</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e1b4b' }}>
+                {/* Scope Summary Pills */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                  <div style={{ background: '#e0e7ff', padding: '10px 14px', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#4338ca', fontWeight: 700 }}>SELECTED RECIPIENTS</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#1e1b4b' }}>
                       {selectedStudentIds.length} Students
                     </div>
                   </div>
-                  <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 700 }}>DATE PERIOD</div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#064e3b' }}>
+                  <div style={{ background: '#ecfdf5', padding: '10px 14px', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#047857', fontWeight: 700 }}>DATE PERIOD</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#064e3b' }}>
                       {startDate} to {endDate}
                     </div>
                   </div>
-                  <div style={{ background: '#fef3c7', padding: '12px', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 700 }}>SESSION CATEGORY</div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#78350f' }}>
-                      {sessionType.toUpperCase()}
+                  <div style={{ background: '#fef3c7', padding: '10px 14px', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 700 }}>SESSION CATEGORY</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#78350f' }}>
+                      {sessionLabel}
                     </div>
                   </div>
                 </div>
 
-                {/* Message Template Preview & Interactive Editor */}
-                <div>
-                  <div className="template-section-header">
-                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#334155' }}>
-                      WhatsApp Notification Message Preview:
-                    </div>
-                    <div className="template-editor-tabs">
-                      <button
-                        type="button"
-                        className={`template-tab-btn ${!isEditingTemplate ? 'active' : ''}`}
-                        onClick={() => setIsEditingTemplate(false)}
-                      >
-                        <Eye size={13} />
-                        <span>Live Preview</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`template-tab-btn ${isEditingTemplate ? 'active' : ''}`}
-                        onClick={() => setIsEditingTemplate(true)}
-                      >
-                        <Edit3 size={13} />
-                        <span>Edit Template</span>
-                      </button>
-                    </div>
-                  </div>
+                {/* Main Modal Tab Navigation: Report Card vs WhatsApp Text */}
+                <div className="preview-main-tabs">
+                  <button
+                    type="button"
+                    className={`preview-tab-btn ${activePreviewTab === 'report_card' ? 'active' : ''}`}
+                    onClick={() => setActivePreviewTab('report_card')}
+                  >
+                    <Layers size={16} />
+                    <span>📊 Official Attendance Report Card & Image</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`preview-tab-btn ${activePreviewTab === 'message_text' ? 'active' : ''}`}
+                    onClick={() => setActivePreviewTab('message_text')}
+                  >
+                    <FileText size={16} />
+                    <span>💬 WhatsApp Notification Message Preview</span>
+                  </button>
+                </div>
 
-                  {saveSuccessMessage && (
-                    <div className="save-success-banner" style={{ marginBottom: '10px' }}>
-                      <Check size={16} />
-                      <span>{saveSuccessMessage}</span>
-                    </div>
-                  )}
+                {/* ========================================================= */}
+                {/* TAB 1: OFFICIAL REPORT CARD PREVIEW & IMAGE EXPORT */}
+                {/* ========================================================= */}
+                {activePreviewTab === 'report_card' && (
+                  <div>
+                    {/* Student Selector Toolbar */}
+                    {selectedStudentsList.length > 0 && (
+                      <div className="report-card-toolbar">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <Users size={16} style={{ color: '#4f46e5' }} />
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                            Previewing Student:
+                          </span>
+                          <select
+                            className="student-preview-select"
+                            value={previewStudentId || ''}
+                            onChange={(e) => setPreviewStudentId(Number(e.target.value))}
+                            style={{ minWidth: '240px' }}
+                          >
+                            {selectedStudentsList.map((stu) => (
+                              <option key={stu.student_id} value={stu.student_id}>
+                                {stu.name} — Room {stu.room_number || 'N/A'} ({stu.attendance_percentage}%)
+                              </option>
+                            ))}
+                          </select>
 
-                  {!isEditingTemplate ? (
-                    <>
-                      {/* Student Selector Bar for Live Preview */}
-                      {selectedStudentsList.length > 0 && (
-                        <div className="student-preview-bar">
-                          <div className="student-preview-select-wrap">
-                            <Users size={15} style={{ color: '#4f46e5' }} />
-                            <span style={{ fontSize: '0.785rem', fontWeight: 700, color: '#475569' }}>
-                              Previewing Student:
-                            </span>
-                            <select
-                              className="student-preview-select"
-                              value={previewStudentId || ''}
-                              onChange={(e) => setPreviewStudentId(Number(e.target.value))}
-                            >
-                              {selectedStudentsList.map((stu) => (
-                                <option key={stu.student_id} value={stu.student_id}>
-                                  {stu.name} — Room {stu.room_number || 'N/A'} ({stu.attendance_percentage}%)
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                             <button
                               type="button"
                               className="student-preview-nav-btn"
@@ -1486,8 +2234,8 @@ export const AttendanceReportsView: React.FC = () => {
                               <ChevronLeft size={13} />
                               <span>Prev</span>
                             </button>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
-                              {currentPreviewIndex + 1} of {selectedStudentsList.length}
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', padding: '0 4px' }}>
+                              {currentPreviewIndex + 1} / {selectedStudentsList.length}
                             </span>
                             <button
                               type="button"
@@ -1499,114 +2247,476 @@ export const AttendanceReportsView: React.FC = () => {
                               <span>Next</span>
                               <ChevronRight size={13} />
                             </button>
+                          </div>
+                        </div>
+
+                        {/* Image Actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="btn-card-action btn-download-img"
+                            onClick={handleDownloadReportImage}
+                            disabled={isExportingImage}
+                            title="Download crisp report card PNG image"
+                          >
+                            <Download size={14} />
+                            <span>Download PNG</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-card-action btn-copy-img"
+                            onClick={handleCopyReportImage}
+                            disabled={isExportingImage}
+                            title="Copy visual report card image to clipboard"
+                          >
+                            <Copy size={14} />
+                            <span>Copy Image</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-card-action btn-copy-img"
+                            onClick={handlePrintReport}
+                            title="Print this official report"
+                          >
+                            <Printer size={14} />
+                            <span>Print</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Official Report Card (Wrapped for display & html2canvas export) */}
+                    <div ref={reportCardRef} className="official-report-card">
+                      {/* Gurukul Header */}
+                      <div className="report-card-header">
+                        <div className="report-card-logo-area">
+                          <div className="report-card-emblem">🏛️</div>
+                          <div className="report-card-title-group">
+                            <h2>SHREE SWAMINARAYAN GURUKUL HOSTEL</h2>
+                            <p>Official Attendance & Punctuality Report Card</p>
+                          </div>
+                        </div>
+                        <div className="report-card-meta-badge">
+                          <span className="report-date-pill">Period: {startDate} to {endDate}</span>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                            Sessions: {sessionLabel}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Student Profile Card */}
+                      {currentPreviewStudent && (
+                        <>
+                          <div className="report-card-student-box">
+                            <div className="report-student-name-block">
+                              <h3 className="report-student-name">{currentPreviewStudent.name}</h3>
+                              <div className="report-student-code">
+                                Student ID / Code: <strong>{currentPreviewStudent.student_code}</strong>
+                              </div>
+                            </div>
+                            <div className="report-field-item">
+                              <span className="report-field-k">Room Number</span>
+                              <span className="report-field-v">Room {currentPreviewStudent.room_number || 'N/A'}</span>
+                            </div>
+                            <div className="report-field-item">
+                              <span className="report-field-k">Floor</span>
+                              <span className="report-field-v">Floor {currentPreviewStudent.floor_id || 'N/A'}</span>
+                            </div>
+                            <div className="report-field-item">
+                              <span className="report-field-k">Student Phone</span>
+                              <span className="report-field-v">{currentPreviewStudent.phone_number || '—'}</span>
+                            </div>
+                            <div className="report-field-item">
+                              <span className="report-field-k">Parent / Guardian Phone</span>
+                              <span className="report-field-v">{currentPreviewStudent.parent_phone || '—'}</span>
+                            </div>
+                            <div className="report-field-item" style={{ gridColumn: 'span 2' }}>
+                              <span className="report-field-k">Performance Rating</span>
+                              <div>
+                                {(() => {
+                                  const r = getRatingBadge(currentPreviewStudent.attendance_percentage);
+                                  return (
+                                    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: '6px', background: r.bg, color: r.color, fontWeight: 700, fontSize: '0.85rem' }}>
+                                      {r.label} ({currentPreviewStudent.attendance_percentage}%)
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* KPI Badges */}
+                          <div className="report-card-kpi-grid">
+                            <div className="report-kpi-pill">
+                              <div className="report-kpi-pill-val">{currentPreviewStudent.sessions_conducted}</div>
+                              <div className="report-kpi-pill-lbl">Conducted</div>
+                            </div>
+                            <div className="report-kpi-pill">
+                              <div className="report-kpi-pill-val" style={{ color: '#15803d' }}>
+                                {currentPreviewStudent.sessions_attended}
+                              </div>
+                              <div className="report-kpi-pill-lbl">Attended</div>
+                            </div>
+                            <div className="report-kpi-pill">
+                              <div className="report-kpi-pill-val" style={{ color: currentPreviewStudent.total_absences > 0 ? '#b91c1c' : '#64748b' }}>
+                                {currentPreviewStudent.total_absences}
+                              </div>
+                              <div className="report-kpi-pill-lbl">Absences</div>
+                            </div>
+                            <div className="report-kpi-pill">
+                              <div className="report-kpi-pill-val" style={{ color: '#0284c7' }}>
+                                {currentPreviewStudent.total_leaves || 0}
+                              </div>
+                              <div className="report-kpi-pill-lbl">Leaves</div>
+                            </div>
+                            <div className="report-kpi-pill">
+                              <div className="report-kpi-pill-val" style={{ color: '#059669' }}>
+                                {currentPreviewStudent.on_time_count}
+                              </div>
+                              <div className="report-kpi-pill-lbl">On-Time</div>
+                            </div>
+                            <div className="report-kpi-pill">
+                              <div className="report-kpi-pill-val" style={{ color: '#b45309' }}>
+                                {currentPreviewStudent.late_arrivals}
+                              </div>
+                              <div className="report-kpi-pill-lbl">Late</div>
+                            </div>
+                            <div className="report-kpi-pill" style={{ background: '#eef2ff', borderColor: '#c7d2fe' }}>
+                              <div className="report-kpi-pill-val" style={{ color: '#4338ca' }}>
+                                {currentPreviewStudent.attendance_percentage}%
+                              </div>
+                              <div className="report-kpi-pill-lbl" style={{ color: '#4338ca', fontWeight: 700 }}>Attendance Rate</div>
+                            </div>
+                          </div>
+
+                          {/* Month-Wise Attendance Matrix for this Student */}
+                          <div className="report-matrix-section">
+                            <div className="report-matrix-title">
+                              <FileSpreadsheet size={16} style={{ color: '#4f46e5' }} />
+                              <span>Month-Wise Attendance Breakdown</span>
+                            </div>
+
+                            <div className="report-matrix-table-wrap">
+                              <table className="report-matrix-table">
+                                <thead>
+                                  <tr>
+                                    <th className="th-cat-year">Year</th>
+                                    <th className="th-cat-year">Period</th>
+                                    <th className="th-cat-dates">Total Days</th>
+                                    <th className="th-cat-dates">Leave Days</th>
+                                    {activeSessionKeys.map((sKey) => {
+                                      const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                                      const sName = sOpt ? sOpt.label : sKey.toUpperCase();
+                                      if (sKey === 'aarti') {
+                                        return (
+                                          <React.Fragment key={sKey}>
+                                            <th className="th-cat-aarti">Aarti Attended</th>
+                                            <th className="th-cat-aarti">Aarti %</th>
+                                          </React.Fragment>
+                                        );
+                                      }
+                                      if (sKey === 'sabha') {
+                                        return (
+                                          <React.Fragment key={sKey}>
+                                            <th className="th-cat-sabha">Total Sabha</th>
+                                            <th className="th-cat-sabha">Attended Sabha</th>
+                                            <th className="th-cat-sabha">Sabha %</th>
+                                          </React.Fragment>
+                                        );
+                                      }
+                                      return (
+                                        <React.Fragment key={sKey}>
+                                          <th className={getSessionHeaderClass(sKey)}>Total {sName}</th>
+                                          <th className={getSessionHeaderClass(sKey)}>Attended</th>
+                                          <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                    <th className="th-cat-year">Overall %</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {getStudentBreakdown(currentPreviewStudent).map((row, idx) => (
+                                    <tr key={idx}>
+                                      <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
+                                      <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
+                                      <td style={{ background: '#f0f9ff' }}>{row.total_days}</td>
+                                      <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
+                                        {row.leave_days}
+                                      </td>
+                                      {activeSessionKeys.map((sKey) => {
+                                        const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
+                                        const sPct = sData.percentage;
+                                        const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
+
+                                        if (sKey === 'aarti') {
+                                          return (
+                                            <React.Fragment key={sKey}>
+                                              <td style={{ background: '#fffbeb', fontWeight: 700, color: '#9a3412' }}>{sData.attended}</td>
+                                              <td style={{ background: '#fffbeb', fontWeight: 800, color: pctColor }}>{sPct}%</td>
+                                            </React.Fragment>
+                                          );
+                                        }
+                                        if (sKey === 'sabha') {
+                                          return (
+                                            <React.Fragment key={sKey}>
+                                              <td style={{ background: '#f0fdf4' }}>{sData.conducted}</td>
+                                              <td style={{ background: '#f0fdf4', fontWeight: 700, color: '#166534' }}>{sData.attended}</td>
+                                              <td style={{ background: '#f0fdf4', fontWeight: 800, color: pctColor }}>{sPct}%</td>
+                                            </React.Fragment>
+                                          );
+                                        }
+                                        return (
+                                          <React.Fragment key={sKey}>
+                                            <td style={{ background: '#faf5ff' }}>{sData.conducted}</td>
+                                            <td style={{ background: '#faf5ff', fontWeight: 700, color: '#6b21a8' }}>{sData.attended}</td>
+                                            <td style={{ background: '#faf5ff', fontWeight: 800, color: pctColor }}>{sPct}%</td>
+                                          </React.Fragment>
+                                        );
+                                      })}
+                                      <td style={{ fontWeight: 800, color: row.overall_percentage >= 75 ? '#15803d' : '#d97706', background: '#f8fafc' }}>
+                                        {row.overall_percentage}%
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          {/* Remarks if any */}
+                          {customNote && (
+                            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '10px 14px', borderRadius: '8px', fontSize: '0.825rem', color: '#92400e' }}>
+                              <strong>Admin Remark:</strong> {customNote}
+                            </div>
+                          )}
+
+                          {/* Official Sign-off & Verification Footer */}
+                          <div className="report-card-footer">
+                            <div className="report-footer-disclaimer">
+                              <div>This is an official system-generated attendance report from the Hostel Attendance &amp; Management System (HAMS).</div>
+                              <div style={{ marginTop: '2px', color: '#94a3b8' }}>
+                                Generated on: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • HSH Integrated Engine
+                              </div>
+                            </div>
+                            <div className="report-signature-box">
+                              <div className="report-signature-line"></div>
+                              <div className="report-signature-text">Hostel Administrator / Rector</div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Pre-Send Attachment Option */}
+                    <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', color: '#0f172a' }}>
+                        <input
+                          type="checkbox"
+                          checked={attachReportImage}
+                          onChange={(e) => setAttachReportImage(e.target.checked)}
+                        />
+                        <span>🖼️ Attach Visual Report Card Image (PNG) with WhatsApp Notification</span>
+                      </label>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        (Parents &amp; students receive the visual card directly on their phones)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* ========================================================= */}
+                {/* TAB 2: WHATSAPP MESSAGE TEXT TEMPLATE PREVIEW & EDITOR */}
+                {/* ========================================================= */}
+                {activePreviewTab === 'message_text' && (
+                  <div>
+                    <div className="template-section-header">
+                      <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#334155' }}>
+                        WhatsApp Notification Message Preview:
+                      </div>
+                      <div className="template-editor-tabs">
+                        <button
+                          type="button"
+                          className={`template-tab-btn ${!isEditingTemplate ? 'active' : ''}`}
+                          onClick={() => setIsEditingTemplate(false)}
+                        >
+                          <Eye size={13} />
+                          <span>Live Preview</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`template-tab-btn ${isEditingTemplate ? 'active' : ''}`}
+                          onClick={() => setIsEditingTemplate(true)}
+                        >
+                          <Edit3 size={13} />
+                          <span>Edit Template</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {saveSuccessMessage && (
+                      <div className="save-success-banner" style={{ marginBottom: '10px' }}>
+                        <Check size={16} />
+                        <span>{saveSuccessMessage}</span>
+                      </div>
+                    )}
+
+                    {!isEditingTemplate ? (
+                      <>
+                        {/* Student Selector Bar for Live Preview */}
+                        {selectedStudentsList.length > 0 && (
+                          <div className="student-preview-bar">
+                            <div className="student-preview-select-wrap">
+                              <Users size={15} style={{ color: '#4f46e5' }} />
+                              <span style={{ fontSize: '0.785rem', fontWeight: 700, color: '#475569' }}>
+                                Previewing Student:
+                              </span>
+                              <select
+                                className="student-preview-select"
+                                value={previewStudentId || ''}
+                                onChange={(e) => setPreviewStudentId(Number(e.target.value))}
+                              >
+                                {selectedStudentsList.map((stu) => (
+                                  <option key={stu.student_id} value={stu.student_id}>
+                                    {stu.name} — Room {stu.room_number || 'N/A'} ({stu.attendance_percentage}%)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                className="student-preview-nav-btn"
+                                onClick={handlePrevStudent}
+                                disabled={selectedStudentsList.length <= 1}
+                                title="Previous student"
+                              >
+                                <ChevronLeft size={13} />
+                                <span>Prev</span>
+                              </button>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+                                {currentPreviewIndex + 1} of {selectedStudentsList.length}
+                              </span>
+                              <button
+                                type="button"
+                                className="student-preview-nav-btn"
+                                onClick={handleNextStudent}
+                                disabled={selectedStudentsList.length <= 1}
+                                title="Next student"
+                              >
+                                <span>Next</span>
+                                <ChevronRight size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ height: '30px', padding: '0 10px', fontSize: '0.75rem' }}
+                                onClick={() => setIsEditingTemplate(true)}
+                                title="Customize this template"
+                              >
+                                <Edit3 size={13} />
+                                <span>Edit Template</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Formatted Live Message Card for Selected Student */}
+                        <div className="message-preview-card">
+                          {renderClientTemplate(activeTemplateText, currentPreviewStudent, {
+                            start_date: startDate,
+                            end_date: endDate,
+                            session_name: sessionLabel,
+                            total_conducted: summary?.total_sessions_conducted || 0,
+                            admin_note: customNote
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      /* Interactive Template Editor Box */
+                      <div className="template-editor-box">
+                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                          Modify the notification template below. Click any dynamic tag to insert it at your cursor. Saving permanently updates the template in the database and reflects immediately across all student previews.
+                        </div>
+
+                        <div>
+                          <div className="variable-pills-label" style={{ marginBottom: '4px' }}>
+                            Click tag to insert at cursor:
+                          </div>
+                          <div className="variable-pills-container">
+                            {TEMPLATE_VARIABLES.map((v) => (
+                              <button
+                                key={v.tag}
+                                type="button"
+                                className="variable-pill-btn"
+                                onClick={() => handleInsertVariable(v.tag)}
+                                title={`Insert ${v.label}`}
+                              >
+                                + {v.tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <textarea
+                          ref={textareaRef}
+                          className="template-textarea"
+                          value={activeTemplateText}
+                          onChange={(e) => setActiveTemplateText(e.target.value)}
+                          rows={10}
+                          placeholder="Compose attendance report notification template..."
+                        />
+
+                        <div className="template-editor-actions">
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              className="btn-save-template"
+                              onClick={handleSaveTemplate}
+                              disabled={isSavingTemplate}
+                            >
+                              {isSavingTemplate ? (
+                                <>
+                                  <RefreshCw size={14} className="animate-spin" />
+                                  <span>Saving...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Save size={14} />
+                                  <span>Save Template</span>
+                                </>
+                              )}
+                            </button>
                             <button
                               type="button"
                               className="btn-secondary"
-                              style={{ height: '30px', padding: '0 10px', fontSize: '0.75rem' }}
-                              onClick={() => setIsEditingTemplate(true)}
-                              title="Customize this template"
+                              style={{ height: '34px', fontSize: '0.8rem' }}
+                              onClick={handleResetTemplate}
+                              title="Reset to default format"
                             >
-                              <Edit3 size={13} />
-                              <span>Edit Template</span>
+                              <RotateCcw size={14} />
+                              <span>Reset to Default</span>
                             </button>
                           </div>
-                        </div>
-                      )}
 
-                      {/* Formatted Live Message Card for Selected Student */}
-                      <div className="message-preview-card">
-                        {renderClientTemplate(activeTemplateText, currentPreviewStudent, {
-                          start_date: startDate,
-                          end_date: endDate,
-                          session_name: sessionType.toUpperCase(),
-                          total_conducted: summary?.total_sessions_conducted || 0,
-                          admin_note: customNote
-                        })}
-                      </div>
-                    </>
-                  ) : (
-                    /* Interactive Template Editor Box */
-                    <div className="template-editor-box">
-                      <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                        Modify the notification template below. Click any dynamic tag to insert it at your cursor. Saving permanently updates the template in the database and reflects immediately across all student previews.
-                      </div>
-
-                      <div>
-                        <div className="variable-pills-label" style={{ marginBottom: '4px' }}>
-                          Click tag to insert at cursor:
-                        </div>
-                        <div className="variable-pills-container">
-                          {TEMPLATE_VARIABLES.map((v) => (
-                            <button
-                              key={v.tag}
-                              type="button"
-                              className="variable-pill-btn"
-                              onClick={() => handleInsertVariable(v.tag)}
-                              title={`Insert ${v.label}`}
-                            >
-                              + {v.tag}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <textarea
-                        ref={textareaRef}
-                        className="template-textarea"
-                        value={activeTemplateText}
-                        onChange={(e) => setActiveTemplateText(e.target.value)}
-                        rows={10}
-                        placeholder="Compose attendance report notification template..."
-                      />
-
-                      <div className="template-editor-actions">
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            className="btn-save-template"
-                            onClick={handleSaveTemplate}
-                            disabled={isSavingTemplate}
-                          >
-                            {isSavingTemplate ? (
-                              <>
-                                <RefreshCw size={14} className="animate-spin" />
-                                <span>Saving...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Save size={14} />
-                                <span>Save Template</span>
-                              </>
-                            )}
-                          </button>
                           <button
                             type="button"
                             className="btn-secondary"
                             style={{ height: '34px', fontSize: '0.8rem' }}
-                            onClick={handleResetTemplate}
-                            title="Reset to default format"
+                            onClick={() => {
+                              const key = previewRecipient === 'parent' ? 'parent_report' : 'student_report';
+                              setActiveTemplateText(templates[key] || DEFAULT_PARENT_TEMPLATE);
+                              setIsEditingTemplate(false);
+                            }}
                           >
-                            <RotateCcw size={14} />
-                            <span>Reset to Default</span>
+                            Cancel
                           </button>
                         </div>
-
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          style={{ height: '34px', fontSize: '0.8rem' }}
-                          onClick={() => {
-                            const key = previewRecipient === 'parent' ? 'parent_report' : 'student_report';
-                            setActiveTemplateText(templates[key] || DEFAULT_PARENT_TEMPLATE);
-                            setIsEditingTemplate(false);
-                          }}
-                        >
-                          Cancel
-                        </button>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Optional Custom Note */}
                 <div className="filter-input-group">
@@ -1625,7 +2735,7 @@ export const AttendanceReportsView: React.FC = () => {
                   <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                     Selected Recipients ({selectedStudentsList.length}):
                   </div>
-                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
                     <table className="attendance-table" style={{ fontSize: '0.8rem' }}>
                       <thead>
                         <tr>
@@ -1867,8 +2977,8 @@ export const AttendanceReportsView: React.FC = () => {
                                 {h.source === 'hsh_api'
                                   ? 'External HSH API'
                                   : h.source === 'leave_portal'
-                                  ? 'Official Leave Portal'
-                                  : 'Local BLE Scanner'}
+                                    ? 'Official Leave Portal'
+                                    : 'Local BLE Scanner'}
                               </span>
                             </td>
                           </tr>
@@ -1891,4 +3001,5 @@ export const AttendanceReportsView: React.FC = () => {
     </div>
   );
 };
+
 export default AttendanceReportsView;

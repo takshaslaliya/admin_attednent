@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  CalendarClock, 
-  PlusCircle, 
-  FileSpreadsheet, 
+import {
+  LayoutDashboard,
+  CalendarClock,
+  PlusCircle,
+  FileSpreadsheet,
   CalendarCheck,
-  Users, 
-  MessageSquare, 
-  LogOut, 
-  ShieldCheck, 
-  ShieldAlert, 
-  UserCheck, 
-  Palmtree, 
-  Key, 
-  KeyRound, 
-  FileText, 
+  Users,
+  MessageSquare,
+  LogOut,
+  ShieldCheck,
+  ShieldAlert,
+  UserCheck,
+  Palmtree,
+  Key,
+  KeyRound,
+  FileText,
   ChevronDown,
   Clock,
   Send,
@@ -190,101 +190,101 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 <CalendarClock size={18} className="nav-icon" style={{ color: '#4f46e5' }} />
                 <span>Attendance</span>
               </div>
-              <ChevronDown 
-                size={16} 
-                className={`nav-chevron ${openSections.attendance ? 'open' : ''}`} 
+              <ChevronDown
+                size={16}
+                className={`nav-chevron ${openSections.attendance ? 'open' : ''}`}
               />
             </button>
 
             {openSections.attendance && (
-            <div className="nav-submenu">
-              <button
-                className={`nav-subitem-btn ${isAttendance ? 'active' : ''}`}
-                onClick={() => handleNavClick('/attendance')}
-              >
-                <span className="subitem-bullet"></span>
-                <FileSpreadsheet size={15} className="subitem-icon" />
-                <span>Attendance Reports</span>
-              </button>
-
-              <button
-                className={`nav-subitem-btn ${isOneDayAttendance ? 'active' : ''}`}
-                onClick={() => handleNavClick('/one-day-attendance')}
-              >
-                <span className="subitem-bullet"></span>
-                <CalendarCheck size={15} className="subitem-icon" style={{ color: '#0d9488' }} />
-                <span>One-Day Attendance</span>
-              </button>
-
-              {canShowLeaves && (
+              <div className="nav-submenu">
                 <button
-                  className={`nav-subitem-btn ${isLeaves ? 'active' : ''}`}
-                  onClick={() => handleNavClick('/leaves')}
+                  className={`nav-subitem-btn ${isAttendance ? 'active' : ''}`}
+                  onClick={() => handleNavClick('/attendance')}
                 >
                   <span className="subitem-bullet"></span>
-                  <Palmtree size={15} className="subitem-icon" style={{ color: '#8b5cf6' }} />
-                  <span>Approved Leaves</span>
+                  <FileSpreadsheet size={15} className="subitem-icon" />
+                  <span>Attendance Reports</span>
                 </button>
-              )}
-            </div>
-          )}
-        </div>
 
-        {/* 3. Students & Users Category (Collapsible Sub-menu) */}
-        <div className="nav-group">
-          <button
-            type="button"
-            className={`nav-item-btn nav-group-btn ${isStudentsActive ? 'parent-active' : ''}`}
-            onClick={() => toggleSection('students')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Users size={18} className="nav-icon" style={{ color: '#0284c7' }} />
-              <span>{isLeader ? 'Students' : 'Students & Users'}</span>
-            </div>
-            <ChevronDown 
-              size={16} 
-              className={`nav-chevron ${openSections.students ? 'open' : ''}`} 
-            />
-          </button>
+                <button
+                  className={`nav-subitem-btn ${isOneDayAttendance ? 'active' : ''}`}
+                  onClick={() => handleNavClick('/one-day-attendance')}
+                >
+                  <span className="subitem-bullet"></span>
+                  <CalendarCheck size={15} className="subitem-icon" style={{ color: '#0d9488' }} />
+                  <span>One-Day Attendance</span>
+                </button>
 
-          {openSections.students && (
-            <div className="nav-submenu">
-              <button
-                className={`nav-subitem-btn ${isStudents ? 'active' : ''}`}
-                onClick={() => handleNavClick('/students')}
-              >
-                <span className="subitem-bullet"></span>
-                <Users size={15} className="subitem-icon" />
-                <span>Students Directory</span>
-              </button>
-
-              {!isLeader && (
-                <>
+                {canShowLeaves && (
                   <button
-                    className={`nav-subitem-btn ${isLeaders ? 'active' : ''}`}
-                    onClick={() => handleNavClick('/leaders')}
+                    className={`nav-subitem-btn ${isLeaves ? 'active' : ''}`}
+                    onClick={() => handleNavClick('/leaves')}
                   >
                     <span className="subitem-bullet"></span>
-                    <Key size={15} className="subitem-icon" style={{ color: '#f59e0b' }} />
-                    <span>User Credentials</span>
+                    <Palmtree size={15} className="subitem-icon" style={{ color: '#8b5cf6' }} />
+                    <span>Approved Leaves</span>
                   </button>
+                )}
+              </div>
+            )}
+          </div>
 
-                  <button
-                    className={`nav-subitem-btn ${isSessionViewers ? 'active' : ''}`}
-                    onClick={() => handleNavClick('/session-viewers')}
-                  >
-                    <span className="subitem-bullet"></span>
-                    <KeyRound size={15} className="subitem-icon" style={{ color: '#8b5cf6' }} />
-                    <span>Live Viewer Numbers</span>
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+          {/* 3. Students & Users Category (Collapsible Sub-menu) */}
+          <div className="nav-group">
+            <button
+              type="button"
+              className={`nav-item-btn nav-group-btn ${isStudentsActive ? 'parent-active' : ''}`}
+              onClick={() => toggleSection('students')}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Users size={18} className="nav-icon" style={{ color: '#0284c7' }} />
+                <span>{isLeader ? 'Students' : 'Students & Users'}</span>
+              </div>
+              <ChevronDown
+                size={16}
+                className={`nav-chevron ${openSections.students ? 'open' : ''}`}
+              />
+            </button>
 
-        {/* 4. WhatsApp Automation Category (Collapsible Sub-menu) */}
-        {canShowWhatsApp && (
+            {openSections.students && (
+              <div className="nav-submenu">
+                <button
+                  className={`nav-subitem-btn ${isStudents ? 'active' : ''}`}
+                  onClick={() => handleNavClick('/students')}
+                >
+                  <span className="subitem-bullet"></span>
+                  <Users size={15} className="subitem-icon" />
+                  <span>Students Directory</span>
+                </button>
+
+                {!isLeader && (
+                  <>
+                    <button
+                      className={`nav-subitem-btn ${isLeaders ? 'active' : ''}`}
+                      onClick={() => handleNavClick('/leaders')}
+                    >
+                      <span className="subitem-bullet"></span>
+                      <Key size={15} className="subitem-icon" style={{ color: '#f59e0b' }} />
+                      <span>User Credentials</span>
+                    </button>
+
+                    <button
+                      className={`nav-subitem-btn ${isSessionViewers ? 'active' : ''}`}
+                      onClick={() => handleNavClick('/session-viewers')}
+                    >
+                      <span className="subitem-bullet"></span>
+                      <KeyRound size={15} className="subitem-icon" style={{ color: '#8b5cf6' }} />
+                      <span>Live Viewer Numbers</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 4. WhatsApp Automation Category (Collapsible Sub-menu) */}
+          {canShowWhatsApp && (
             <div className="nav-group">
               <button
                 type="button"

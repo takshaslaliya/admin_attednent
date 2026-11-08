@@ -939,3 +939,437 @@
   color: #4338ca;
 }
 
+/* =========================================================================
+   Official Attendance Report Card & Image Generator Styles
+   ========================================================================= */
+
+.preview-main-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+}
+
+.preview-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.preview-tab-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.preview-tab-btn.active {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+}
+
+/* Report Image Card Actions Toolbar */
+.report-card-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #f8fafc;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+}
+
+.btn-card-action {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.btn-download-img {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+}
+
+.btn-download-img:hover {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  transform: translateY(-1px);
+}
+
+.btn-copy-img {
+  background: #ffffff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.btn-copy-img:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+/* =========================================================================
+   OFFICIAL REPORT CARD (CONTAINER FOR DISPLAY & IMAGE EXPORT)
+   ========================================================================= */
+.official-report-card {
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Gurukul Header */
+.report-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid #4f46e5;
+  padding-bottom: 16px;
+  gap: 16px;
+}
+
+.report-card-logo-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.report-card-emblem {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  box-shadow: 0 3px 8px rgba(79, 70, 229, 0.3);
+  flex-shrink: 0;
+}
+
+.report-card-title-group h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #1e1b4b;
+  letter-spacing: -0.3px;
+  text-transform: uppercase;
+}
+
+.report-card-title-group p {
+  margin: 3px 0 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.report-card-meta-badge {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.report-date-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* Student Profile Card inside Report */
+.report-card-student-box {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  align-items: center;
+}
+
+.report-student-name-block {
+  grid-column: span 2;
+}
+
+@media (max-width: 600px) {
+  .report-student-name-block {
+    grid-column: span 1;
+  }
+}
+
+.report-student-name {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.report-student-code {
+  font-size: 0.82rem;
+  color: #4f46e5;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.report-field-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-field-k {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.report-field-v {
+  font-size: 0.92rem;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+/* KPI Summary Badges */
+.report-card-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.report-kpi-pill {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.report-kpi-pill-val {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.report-kpi-pill-lbl {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* Month-Wise Attendance Table inside Report Card (Spreadsheet look) */
+.report-matrix-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-matrix-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-matrix-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+}
+
+.report-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.825rem;
+  text-align: center;
+}
+
+.report-matrix-table th {
+  padding: 10px 12px;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  white-space: nowrap;
+}
+
+.report-matrix-table td {
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Colored Header Categories matching User's Sheet */
+.th-cat-year {
+  background: #fef08a !important; /* Yellow */
+  color: #713f12 !important;
+}
+
+.th-cat-dates {
+  background: #bae6fd !important; /* Sky Blue */
+  color: #0369a1 !important;
+}
+
+.th-cat-aarti {
+  background: #fed7aa !important; /* Tan/Peach */
+  color: #9a3412 !important;
+}
+
+.th-cat-sabha {
+  background: #bbf7d0 !important; /* Light Green */
+  color: #166534 !important;
+}
+
+.th-cat-other {
+  background: #e9d5ff !important; /* Purple */
+  color: #581c87 !important;
+}
+
+.report-matrix-table tr:hover td {
+  background-color: #f8fafc;
+}
+
+.report-matrix-table tfoot td {
+  background: #f1f5f9;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* Report Footer / Signature */
+.report-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 16px;
+  margin-top: 4px;
+}
+
+.report-footer-disclaimer {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+  max-width: 500px;
+}
+
+.report-signature-box {
+  text-align: center;
+}
+
+.report-signature-line {
+  width: 150px;
+  border-top: 1.5px solid #0f172a;
+  margin-bottom: 6px;
+}
+
+.report-signature-text {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+/* Tab Switcher for Main Screen (Student-wise vs Month-wise Matrix) */
+.view-mode-tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #e2e8f0;
+  padding: 4px;
+  border-radius: 10px;
+  width: fit-content;
+}
+
+.view-mode-tab-btn {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 0.825rem;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.view-mode-tab-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Print styling for clean Report Card export */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .official-report-card, .official-report-card * {
+    visibility: visible;
+  }
+  .official-report-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 20px !important;
+    margin: 0 !important;
+  }
+  .report-card-toolbar,
+  .modal-header,
+  .modal-footer,
+  .preview-main-tabs,
+  .modal-overlay {
+    display: none !important;
+  }
+}
+
+
