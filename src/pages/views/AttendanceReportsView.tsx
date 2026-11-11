@@ -327,11 +327,15 @@ export const AttendanceReportsView: React.FC = () => {
   const [activePreviewTab, setActivePreviewTab] = useState<'report_card' | 'message_text'>('report_card');
   const [customNote, setCustomNote] = useState('');
   const [sendingNotifications, setSendingNotifications] = useState(false);
+  const [sendProgress, setSendProgress] = useState<string>('');
   const [attachReportImage, setAttachReportImage] = useState<boolean>(true);
   const [isExportingImage, setIsExportingImage] = useState<boolean>(false);
+  const [exportingStudent, setExportingStudent] = useState<StudentDetail | null>(null);
 
-  // Reference for capturing image
+  // References for capturing visual report card images & deduplicating rapid multi-session requests
   const reportCardRef = useRef<HTMLDivElement>(null);
+  const exportCardRef = useRef<HTMLDivElement>(null);
+  const latestRequestIdRef = useRef<number>(0);
 
   // Delivery Status Modal
   const [deliveryStatusModalOpen, setDeliveryStatusModalOpen] = useState(false);
@@ -510,6 +514,7 @@ export const AttendanceReportsView: React.FC = () => {
 
   // Generate Report
   const handleGenerateReport = async () => {
+    const reqId = ++latestRequestIdRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -521,6 +526,8 @@ export const AttendanceReportsView: React.FC = () => {
       };
 
       const res = await apiClient.post('/attendance/reports/generate', payload);
+      if (reqId !== latestRequestIdRef.current) return;
+
       if (res.data?.success && res.data?.data) {
         setSummary(res.data.data.summary);
         setStudents(res.data.data.students || []);
@@ -530,10 +537,13 @@ export const AttendanceReportsView: React.FC = () => {
         setError(res.data?.message || 'Failed to generate report');
       }
     } catch (err: any) {
+      if (reqId !== latestRequestIdRef.current) return;
       console.error('Error generating report:', err);
       setError(err.response?.data?.message || err.message || 'Error communicating with attendance server');
     } finally {
-      setLoading(false);
+      if (reqId === latestRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -849,12 +859,19 @@ export const AttendanceReportsView: React.FC = () => {
     setActiveTemplateText(defaultText);
   };
 
+  // Wait two animation frames so React renders offscreen card before canvas capture
+  const waitForDomPaint = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+
   // Render and capture high-DPI visual report card as PNG base64
-  const captureReportCardImage = async (): Promise<string | null> => {
-    if (!reportCardRef.current) return null;
+  const captureReportCardImage = async (targetEl?: HTMLElement | null, scale = 2): Promise<string | null> => {
+    const el = targetEl || reportCardRef.current;
+    if (!el) return null;
     try {
-      const canvas = await html2canvas(reportCardRef.current, {
-        scale: 2,
+      const canvas = await html2canvas(el, {
+        scale,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
@@ -864,6 +881,13 @@ export const AttendanceReportsView: React.FC = () => {
       console.error('Failed to capture report card canvas:', err);
       return null;
     }
+  };
+
+  // Render & capture personalized report card PNG for a specific student via offscreen exporter
+  const captureStudentSpecificImage = async (stu: StudentDetail): Promise<string | null> => {
+    setExportingStudent(stu);
+    await waitForDomPaint();
+    return await captureReportCardImage(exportCardRef.current, 1.75);
   };
 
   // Download visual report card image as PNG file
@@ -934,47 +958,90 @@ export const AttendanceReportsView: React.FC = () => {
     window.print();
   };
 
-  // Dispatch Notifications
+  // Dispatch Notifications (generates personalized per-student PNG images in safe batches)
   const handleSendNotifications = async () => {
     if (selectedStudentIds.length === 0) return;
     setSendingNotifications(true);
+    setSendProgress('');
 
-    const idempotencyKey = `send_${previewRecipient}_${sessionType}_${startDate}_${Date.now()}`;
+    const baseIdempotencyKey = `send_${previewRecipient}_${sessionType}_${startDate}_${Date.now()}`;
 
     try {
-      let reportImageBase64: string | undefined = undefined;
-      if (attachReportImage && reportCardRef.current) {
-        const captured = await captureReportCardImage();
-        if (captured) {
-          reportImageBase64 = captured;
+      const BATCH_SIZE = attachReportImage ? 8 : selectedStudentIds.length;
+      const totalSelected = selectedStudentIds.length;
+      const combinedResults: any[] = [];
+      let totalSent = 0;
+      let totalFailed = 0;
+
+      for (let startIdx = 0; startIdx < totalSelected; startIdx += BATCH_SIZE) {
+        const batchIds = selectedStudentIds.slice(startIdx, startIdx + BATCH_SIZE);
+        const batchNumber = Math.floor(startIdx / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(totalSelected / BATCH_SIZE);
+
+        let studentImagesMap: Record<number, string> | undefined = undefined;
+        if (attachReportImage) {
+          studentImagesMap = {};
+          for (let j = 0; j < batchIds.length; j++) {
+            const sid = batchIds[j];
+            const stuObj = students.find((s) => s.student_id === sid);
+            if (!stuObj) continue;
+            setSendProgress(`Rendering report image ${startIdx + j + 1}/${totalSelected}...`);
+            const imgData = await captureStudentSpecificImage(stuObj);
+            if (imgData) {
+              studentImagesMap[sid] = imgData;
+            }
+          }
+        }
+
+        setSendProgress(
+          totalBatches > 1
+            ? `Sending batch ${batchNumber}/${totalBatches}...`
+            : `Sending reports (${totalSelected})...`
+        );
+
+        const payload: any = {
+          recipient_type: previewRecipient,
+          student_ids: batchIds,
+          report_params: {
+            session_type: sessionType,
+            start_date: startDate,
+            end_date: endDate
+          },
+          custom_note: customNote.trim() || undefined,
+          custom_template: activeTemplateText,
+          idempotency_key: `${baseIdempotencyKey}_b${batchNumber}`,
+          student_images: studentImagesMap
+        };
+
+        const res = await apiClient.post('/attendance/reports/send-notifications', payload);
+        if (res.data?.success) {
+          totalSent += Number(res.data.stats?.sent || 0);
+          totalFailed += Number(res.data.stats?.failed || 0);
+          if (Array.isArray(res.data.results)) {
+            combinedResults.push(...res.data.results);
+          }
+        } else {
+          throw new Error(res.data?.message || 'Failed to dispatch batch notifications');
         }
       }
 
-      const payload: any = {
-        recipient_type: previewRecipient,
-        student_ids: selectedStudentIds,
-        report_params: {
-          session_type: sessionType,
-          start_date: startDate,
-          end_date: endDate
+      setDeliveryResults({
+        success: true,
+        message: `Processed ${totalSelected} notifications: ${totalSent} successful, ${totalFailed} failed.`,
+        stats: {
+          total: totalSelected,
+          sent: totalSent,
+          failed: totalFailed
         },
-        custom_note: customNote.trim() || undefined,
-        custom_template: activeTemplateText,
-        idempotency_key: idempotencyKey,
-        report_image: reportImageBase64
-      };
-
-      const res = await apiClient.post('/attendance/reports/send-notifications', payload);
-      if (res.data?.success) {
-        setDeliveryResults(res.data);
-        setPreviewModalOpen(false);
-        setDeliveryStatusModalOpen(true);
-      } else {
-        alert(res.data?.message || 'Failed to dispatch notifications');
-      }
+        results: combinedResults
+      });
+      setPreviewModalOpen(false);
+      setDeliveryStatusModalOpen(true);
     } catch (err: any) {
       alert(err.response?.data?.message || err.message || 'Error sending report notifications');
     } finally {
+      setExportingStudent(null);
+      setSendProgress('');
       setSendingNotifications(false);
     }
   };
@@ -1125,8 +1192,247 @@ export const AttendanceReportsView: React.FC = () => {
     return { label: '🚨 Needs Immediate Attention', color: '#b91c1c', bg: '#fee2e2' };
   };
 
+  // Shared Visual Official Report Card Body (used for both live preview and per-student PNG image capture)
+  const renderOfficialReportCardBody = (student: StudentDetail | null) => (
+    <>
+      <div className="report-card-header">
+        <div className="report-card-logo-area">
+          <div className="report-card-emblem">🏛️</div>
+          <div className="report-card-title-group">
+            <h2>SHREE SWAMINARAYAN GURUKUL HOSTEL</h2>
+            <p>Official Attendance &amp; Punctuality Report Card</p>
+          </div>
+        </div>
+        <div className="report-card-meta-badge">
+          <span className="report-date-pill">Period: {startDate} to {endDate}</span>
+          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+            Sessions: {sessionLabel}
+          </span>
+        </div>
+      </div>
+
+      {student && (
+        <>
+          <div className="report-card-student-box">
+            <div className="report-student-name-block">
+              <h3 className="report-student-name">{student.name}</h3>
+              <div className="report-student-code">
+                Student ID / Code: <strong>{student.student_code}</strong>
+              </div>
+            </div>
+            <div className="report-field-item">
+              <span className="report-field-k">Room Number</span>
+              <span className="report-field-v">Room {student.room_number || 'N/A'}</span>
+            </div>
+            <div className="report-field-item">
+              <span className="report-field-k">Floor</span>
+              <span className="report-field-v">Floor {student.floor_id || 'N/A'}</span>
+            </div>
+            <div className="report-field-item">
+              <span className="report-field-k">Student Phone</span>
+              <span className="report-field-v">{student.phone_number || '—'}</span>
+            </div>
+            <div className="report-field-item">
+              <span className="report-field-k">Parent / Guardian Phone</span>
+              <span className="report-field-v">{student.parent_phone || '—'}</span>
+            </div>
+            <div className="report-field-item" style={{ gridColumn: 'span 2' }}>
+              <span className="report-field-k">Performance Rating</span>
+              <div>
+                {(() => {
+                  const r = getRatingBadge(student.attendance_percentage);
+                  return (
+                    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: '6px', background: r.bg, color: r.color, fontWeight: 700, fontSize: '0.85rem' }}>
+                      {r.label} ({student.attendance_percentage}%)
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+
+          <div className="report-card-kpi-grid">
+            <div className="report-kpi-pill">
+              <div className="report-kpi-pill-val">{student.sessions_conducted}</div>
+              <div className="report-kpi-pill-lbl">Conducted</div>
+            </div>
+            <div className="report-kpi-pill">
+              <div className="report-kpi-pill-val" style={{ color: '#15803d' }}>
+                {student.sessions_attended}
+              </div>
+              <div className="report-kpi-pill-lbl">Attended</div>
+            </div>
+            <div className="report-kpi-pill">
+              <div className="report-kpi-pill-val" style={{ color: student.total_absences > 0 ? '#b91c1c' : '#64748b' }}>
+                {student.total_absences}
+              </div>
+              <div className="report-kpi-pill-lbl">Absences</div>
+            </div>
+            <div className="report-kpi-pill">
+              <div className="report-kpi-pill-val" style={{ color: '#0284c7' }}>
+                {student.total_leaves || 0}
+              </div>
+              <div className="report-kpi-pill-lbl">Leaves</div>
+            </div>
+            <div className="report-kpi-pill">
+              <div className="report-kpi-pill-val" style={{ color: '#059669' }}>
+                {student.on_time_count}
+              </div>
+              <div className="report-kpi-pill-lbl">On-Time</div>
+            </div>
+            <div className="report-kpi-pill">
+              <div className="report-kpi-pill-val" style={{ color: '#b45309' }}>
+                {student.late_arrivals}
+              </div>
+              <div className="report-kpi-pill-lbl">Late</div>
+            </div>
+            <div className="report-kpi-pill" style={{ background: '#eef2ff', borderColor: '#c7d2fe' }}>
+              <div className="report-kpi-pill-val" style={{ color: '#4338ca' }}>
+                {student.attendance_percentage}%
+              </div>
+              <div className="report-kpi-pill-lbl" style={{ color: '#4338ca', fontWeight: 700 }}>Attendance Rate</div>
+            </div>
+          </div>
+
+          <div className="report-matrix-section">
+            <div className="report-matrix-title">
+              <FileSpreadsheet size={16} style={{ color: '#4f46e5' }} />
+              <span>Month-Wise Attendance Breakdown</span>
+            </div>
+
+            <div className="report-matrix-table-wrap">
+              <table className="report-matrix-table">
+                <thead>
+                  <tr>
+                    <th className="th-cat-year">Year</th>
+                    <th className="th-cat-year">Period</th>
+                    <th className="th-cat-dates">Total Days</th>
+                    <th className="th-cat-dates">Leave Days</th>
+                    {activeSessionKeys.map((sKey) => {
+                      const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                      const sName = sOpt ? sOpt.label : sKey.toUpperCase();
+                      if (sKey === 'aarti') {
+                        return (
+                          <React.Fragment key={sKey}>
+                            <th className="th-cat-aarti">Aarti Attended</th>
+                            <th className="th-cat-aarti">Aarti %</th>
+                          </React.Fragment>
+                        );
+                      }
+                      if (sKey === 'sabha') {
+                        return (
+                          <React.Fragment key={sKey}>
+                            <th className="th-cat-sabha">Total Sabha</th>
+                            <th className="th-cat-sabha">Attended Sabha</th>
+                            <th className="th-cat-sabha">Sabha %</th>
+                          </React.Fragment>
+                        );
+                      }
+                      return (
+                        <React.Fragment key={sKey}>
+                          <th className={getSessionHeaderClass(sKey)}>Total {sName}</th>
+                          <th className={getSessionHeaderClass(sKey)}>Attended</th>
+                          <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
+                        </React.Fragment>
+                      );
+                    })}
+                    <th className="th-cat-year">Overall %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getStudentBreakdown(student).map((row, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
+                      <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
+                      <td style={{ background: '#f0f9ff' }}>{row.total_days}</td>
+                      <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
+                        {row.leave_days}
+                      </td>
+                      {activeSessionKeys.map((sKey) => {
+                        const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
+                        const sPct = sData.percentage;
+                        const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
+
+                        if (sKey === 'aarti') {
+                          return (
+                            <React.Fragment key={sKey}>
+                              <td style={{ background: '#fffbeb', fontWeight: 700, color: '#9a3412' }}>{sData.attended}</td>
+                              <td style={{ background: '#fffbeb', fontWeight: 800, color: pctColor }}>{sPct}%</td>
+                            </React.Fragment>
+                          );
+                        }
+                        if (sKey === 'sabha') {
+                          return (
+                            <React.Fragment key={sKey}>
+                              <td style={{ background: '#f0fdf4' }}>{sData.conducted}</td>
+                              <td style={{ background: '#f0fdf4', fontWeight: 700, color: '#166534' }}>{sData.attended}</td>
+                              <td style={{ background: '#f0fdf4', fontWeight: 800, color: pctColor }}>{sPct}%</td>
+                            </React.Fragment>
+                          );
+                        }
+                        return (
+                          <React.Fragment key={sKey}>
+                            <td style={{ background: '#faf5ff' }}>{sData.conducted}</td>
+                            <td style={{ background: '#faf5ff', fontWeight: 700, color: '#6b21a8' }}>{sData.attended}</td>
+                            <td style={{ background: '#faf5ff', fontWeight: 800, color: pctColor }}>{sPct}%</td>
+                          </React.Fragment>
+                        );
+                      })}
+                      <td style={{ fontWeight: 800, color: row.overall_percentage >= 75 ? '#15803d' : '#d97706', background: '#f8fafc' }}>
+                        {row.overall_percentage}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {customNote && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '10px 14px', borderRadius: '8px', fontSize: '0.825rem', color: '#92400e' }}>
+              <strong>Admin Remark:</strong> {customNote}
+            </div>
+          )}
+
+          <div className="report-card-footer">
+            <div className="report-footer-disclaimer">
+              <div>This is an official system-generated attendance report from the Hostel Attendance &amp; Management System (HAMS).</div>
+              <div style={{ marginTop: '2px', color: '#94a3b8' }}>
+                Generated on: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • HSH Integrated Engine
+              </div>
+            </div>
+            <div className="report-signature-box">
+              <div className="report-signature-line"></div>
+              <div className="report-signature-text">Hostel Administrator / Rector</div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+
   return (
     <div className="attendance-reports-container">
+      {/* Offscreen Report Card Renderer for guaranteed per-student PNG image capture */}
+      {exportingStudent && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            left: '-99999px',
+            top: 0,
+            width: '860px',
+            pointerEvents: 'none',
+            zIndex: -1,
+            background: '#ffffff'
+          }}
+        >
+          <div ref={exportCardRef} className="official-report-card">
+            {renderOfficialReportCardBody(exportingStudent)}
+          </div>
+        </div>
+      )}
+
       {/* 1. Control & Filter Panel */}
       <section className="reports-control-panel">
         <div className="control-panel-header">
@@ -1153,7 +1459,7 @@ export const AttendanceReportsView: React.FC = () => {
         {/* Multi-Session Type Selector Pills */}
         <div className="filter-input-group">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-            <label>Session Type (Multi-Select Supported)</label>
+            <label>Session Type (Click multiple sessions to combine)</label>
             <div style={{ fontSize: '0.785rem', color: '#4f46e5', fontWeight: 700, background: '#eef2ff', padding: '2px 10px', borderRadius: '12px' }}>
               Selected: {sessionLabel}
             </div>
@@ -1306,13 +1612,13 @@ export const AttendanceReportsView: React.FC = () => {
         )}
       </section>
 
-      {/* 2. Attendance Summary KPI Cards */}
+      {/* 2. Attendance Summary KPI Cards (Total Students & Avg. Overall Attendance Only) */}
       {summary && (
-        <section className="summary-kpi-grid">
-          {/* Total Registered Students */}
+        <section className="summary-kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+          {/* Total Students */}
           <div className="kpi-card">
             <div className="kpi-card-header">
-              <span className="kpi-card-title">Total Registered</span>
+              <span className="kpi-card-title">Total Students</span>
               <div className="kpi-icon-wrap" style={{ background: '#e0e7ff', color: '#4338ca' }}>
                 <Users size={22} />
               </div>
@@ -1321,40 +1627,10 @@ export const AttendanceReportsView: React.FC = () => {
             <div className="kpi-card-subtext">Active enrolled students</div>
           </div>
 
-          {/* Total Students Present */}
+          {/* Avg. Overall Attendance Percentage */}
           <div className="kpi-card">
             <div className="kpi-card-header">
-              <span className="kpi-card-title">Students Present</span>
-              <div className="kpi-icon-wrap" style={{ background: '#dcfce7', color: '#15803d' }}>
-                <CheckCircle2 size={22} />
-              </div>
-            </div>
-            <div className="kpi-card-value">{summary.total_students_present}</div>
-            <div className="kpi-card-subtext" style={{ color: '#16a34a' }}>
-              {summary.total_registered_students > 0
-                ? `${((summary.total_students_present / summary.total_registered_students) * 100).toFixed(1)}% attended ≥1 session`
-                : ''}
-            </div>
-          </div>
-
-          {/* Total Students Absent */}
-          <div className="kpi-card">
-            <div className="kpi-card-header">
-              <span className="kpi-card-title">Students Absent</span>
-              <div className="kpi-icon-wrap" style={{ background: '#ffe4e6', color: '#be123c' }}>
-                <XCircle size={22} />
-              </div>
-            </div>
-            <div className="kpi-card-value">{summary.total_students_absent}</div>
-            <div className="kpi-card-subtext" style={{ color: '#e11d48' }}>
-              Zero sessions recorded
-            </div>
-          </div>
-
-          {/* Overall Attendance Percentage */}
-          <div className="kpi-card">
-            <div className="kpi-card-header">
-              <span className="kpi-card-title">Overall Attendance</span>
+              <span className="kpi-card-title">Avg. Overall Attendance</span>
               <div className="kpi-icon-wrap" style={{ background: '#f3e8ff', color: '#7e22ce' }}>
                 <TrendingUp size={22} />
               </div>
@@ -1364,50 +1640,6 @@ export const AttendanceReportsView: React.FC = () => {
             </div>
             <div className="kpi-card-subtext">
               Across {summary.total_sessions_conducted} conducted session(s)
-            </div>
-          </div>
-
-          {/* Total Late Arrivals */}
-          <div className="kpi-card">
-            <div className="kpi-card-header">
-              <span className="kpi-card-title">Late Arrivals</span>
-              <div className="kpi-icon-wrap" style={{ background: '#fef3c7', color: '#b45309' }}>
-                <Clock size={22} />
-              </div>
-            </div>
-            <div className="kpi-card-value">{summary.total_late_arrivals}</div>
-            <div className="kpi-card-subtext" style={{ color: '#d97706' }}>
-              Arrivals after scheduled cutoff
-            </div>
-          </div>
-
-          {/* On-Time Attendance */}
-          <div className="kpi-card">
-            <div className="kpi-card-header">
-              <span className="kpi-card-title">On-Time Count</span>
-              <div className="kpi-icon-wrap" style={{ background: '#ecfdf5', color: '#059669' }}>
-                <ShieldCheck size={22} />
-              </div>
-            </div>
-            <div className="kpi-card-value">{summary.total_on_time_count}</div>
-            <div className="kpi-card-subtext" style={{ color: '#059669' }}>
-              Punctual entries
-            </div>
-          </div>
-
-          {/* Approved Leaves */}
-          <div className="kpi-card">
-            <div className="kpi-card-header">
-              <span className="kpi-card-title">Approved Leaves</span>
-              <div className="kpi-icon-wrap" style={{ background: '#e0f2fe', color: '#0284c7' }}>
-                <Calendar size={22} />
-              </div>
-            </div>
-            <div className="kpi-card-value" style={{ color: '#0284c7' }}>
-              {summary.total_students_leave ?? 0}
-            </div>
-            <div className="kpi-card-subtext" style={{ color: '#0369a1' }}>
-              {summary.total_leave_instances ?? 0} total leave-days
             </div>
           </div>
         </section>
@@ -2287,240 +2519,7 @@ export const AttendanceReportsView: React.FC = () => {
 
                     {/* Official Report Card (Wrapped for display & html2canvas export) */}
                     <div ref={reportCardRef} className="official-report-card">
-                      {/* Gurukul Header */}
-                      <div className="report-card-header">
-                        <div className="report-card-logo-area">
-                          <div className="report-card-emblem">🏛️</div>
-                          <div className="report-card-title-group">
-                            <h2>SHREE SWAMINARAYAN GURUKUL HOSTEL</h2>
-                            <p>Official Attendance & Punctuality Report Card</p>
-                          </div>
-                        </div>
-                        <div className="report-card-meta-badge">
-                          <span className="report-date-pill">Period: {startDate} to {endDate}</span>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
-                            Sessions: {sessionLabel}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Student Profile Card */}
-                      {currentPreviewStudent && (
-                        <>
-                          <div className="report-card-student-box">
-                            <div className="report-student-name-block">
-                              <h3 className="report-student-name">{currentPreviewStudent.name}</h3>
-                              <div className="report-student-code">
-                                Student ID / Code: <strong>{currentPreviewStudent.student_code}</strong>
-                              </div>
-                            </div>
-                            <div className="report-field-item">
-                              <span className="report-field-k">Room Number</span>
-                              <span className="report-field-v">Room {currentPreviewStudent.room_number || 'N/A'}</span>
-                            </div>
-                            <div className="report-field-item">
-                              <span className="report-field-k">Floor</span>
-                              <span className="report-field-v">Floor {currentPreviewStudent.floor_id || 'N/A'}</span>
-                            </div>
-                            <div className="report-field-item">
-                              <span className="report-field-k">Student Phone</span>
-                              <span className="report-field-v">{currentPreviewStudent.phone_number || '—'}</span>
-                            </div>
-                            <div className="report-field-item">
-                              <span className="report-field-k">Parent / Guardian Phone</span>
-                              <span className="report-field-v">{currentPreviewStudent.parent_phone || '—'}</span>
-                            </div>
-                            <div className="report-field-item" style={{ gridColumn: 'span 2' }}>
-                              <span className="report-field-k">Performance Rating</span>
-                              <div>
-                                {(() => {
-                                  const r = getRatingBadge(currentPreviewStudent.attendance_percentage);
-                                  return (
-                                    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: '6px', background: r.bg, color: r.color, fontWeight: 700, fontSize: '0.85rem' }}>
-                                      {r.label} ({currentPreviewStudent.attendance_percentage}%)
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* KPI Badges */}
-                          <div className="report-card-kpi-grid">
-                            <div className="report-kpi-pill">
-                              <div className="report-kpi-pill-val">{currentPreviewStudent.sessions_conducted}</div>
-                              <div className="report-kpi-pill-lbl">Conducted</div>
-                            </div>
-                            <div className="report-kpi-pill">
-                              <div className="report-kpi-pill-val" style={{ color: '#15803d' }}>
-                                {currentPreviewStudent.sessions_attended}
-                              </div>
-                              <div className="report-kpi-pill-lbl">Attended</div>
-                            </div>
-                            <div className="report-kpi-pill">
-                              <div className="report-kpi-pill-val" style={{ color: currentPreviewStudent.total_absences > 0 ? '#b91c1c' : '#64748b' }}>
-                                {currentPreviewStudent.total_absences}
-                              </div>
-                              <div className="report-kpi-pill-lbl">Absences</div>
-                            </div>
-                            <div className="report-kpi-pill">
-                              <div className="report-kpi-pill-val" style={{ color: '#0284c7' }}>
-                                {currentPreviewStudent.total_leaves || 0}
-                              </div>
-                              <div className="report-kpi-pill-lbl">Leaves</div>
-                            </div>
-                            <div className="report-kpi-pill">
-                              <div className="report-kpi-pill-val" style={{ color: '#059669' }}>
-                                {currentPreviewStudent.on_time_count}
-                              </div>
-                              <div className="report-kpi-pill-lbl">On-Time</div>
-                            </div>
-                            <div className="report-kpi-pill">
-                              <div className="report-kpi-pill-val" style={{ color: '#b45309' }}>
-                                {currentPreviewStudent.late_arrivals}
-                              </div>
-                              <div className="report-kpi-pill-lbl">Late</div>
-                            </div>
-                            <div className="report-kpi-pill" style={{ background: '#eef2ff', borderColor: '#c7d2fe' }}>
-                              <div className="report-kpi-pill-val" style={{ color: '#4338ca' }}>
-                                {currentPreviewStudent.attendance_percentage}%
-                              </div>
-                              <div className="report-kpi-pill-lbl" style={{ color: '#4338ca', fontWeight: 700 }}>Attendance Rate</div>
-                            </div>
-                          </div>
-
-                          {/* Month-Wise Attendance Matrix for this Student */}
-                          <div className="report-matrix-section">
-                            <div className="report-matrix-title">
-                              <FileSpreadsheet size={16} style={{ color: '#4f46e5' }} />
-                              <span>Month-Wise Attendance Breakdown</span>
-                            </div>
-
-                            <div className="report-matrix-table-wrap">
-                              <table className="report-matrix-table">
-                                <thead>
-                                  <tr>
-                                    <th className="th-cat-year">Year</th>
-                                    <th className="th-cat-year">Period</th>
-                                    <th className="th-cat-dates">Total Days</th>
-                                    <th className="th-cat-dates">Leave Days</th>
-                                    {activeSessionKeys.map((sKey) => {
-                                      const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
-                                      const sName = sOpt ? sOpt.label : sKey.toUpperCase();
-                                      if (sKey === 'aarti') {
-                                        return (
-                                          <React.Fragment key={sKey}>
-                                            <th className="th-cat-aarti">Aarti Attended</th>
-                                            <th className="th-cat-aarti">Aarti %</th>
-                                          </React.Fragment>
-                                        );
-                                      }
-                                      if (sKey === 'sabha') {
-                                        return (
-                                          <React.Fragment key={sKey}>
-                                            <th className="th-cat-sabha">Total Sabha</th>
-                                            <th className="th-cat-sabha">Attended Sabha</th>
-                                            <th className="th-cat-sabha">Sabha %</th>
-                                          </React.Fragment>
-                                        );
-                                      }
-                                      return (
-                                        <React.Fragment key={sKey}>
-                                          <th className={getSessionHeaderClass(sKey)}>Total {sName}</th>
-                                          <th className={getSessionHeaderClass(sKey)}>Attended</th>
-                                          <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
-                                        </React.Fragment>
-                                      );
-                                    })}
-                                    <th className="th-cat-year">Overall %</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {getStudentBreakdown(currentPreviewStudent).map((row, idx) => (
-                                    <tr key={idx}>
-                                      <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
-                                      <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
-                                      <td style={{ background: '#f0f9ff' }}>{row.total_days}</td>
-                                      <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
-                                        {row.leave_days}
-                                      </td>
-                                      {activeSessionKeys.map((sKey) => {
-                                        const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
-                                        const sPct = sData.percentage;
-                                        const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
-
-                                        if (sKey === 'aarti') {
-                                          return (
-                                            <React.Fragment key={sKey}>
-                                              <td style={{ background: '#fffbeb', fontWeight: 700, color: '#9a3412' }}>{sData.attended}</td>
-                                              <td style={{ background: '#fffbeb', fontWeight: 800, color: pctColor }}>{sPct}%</td>
-                                            </React.Fragment>
-                                          );
-                                        }
-                                        if (sKey === 'sabha') {
-                                          return (
-                                            <React.Fragment key={sKey}>
-                                              <td style={{ background: '#f0fdf4' }}>{sData.conducted}</td>
-                                              <td style={{ background: '#f0fdf4', fontWeight: 700, color: '#166534' }}>{sData.attended}</td>
-                                              <td style={{ background: '#f0fdf4', fontWeight: 800, color: pctColor }}>{sPct}%</td>
-                                            </React.Fragment>
-                                          );
-                                        }
-                                        return (
-                                          <React.Fragment key={sKey}>
-                                            <td style={{ background: '#faf5ff' }}>{sData.conducted}</td>
-                                            <td style={{ background: '#faf5ff', fontWeight: 700, color: '#6b21a8' }}>{sData.attended}</td>
-                                            <td style={{ background: '#faf5ff', fontWeight: 800, color: pctColor }}>{sPct}%</td>
-                                          </React.Fragment>
-                                        );
-                                      })}
-                                      <td style={{ fontWeight: 800, color: row.overall_percentage >= 75 ? '#15803d' : '#d97706', background: '#f8fafc' }}>
-                                        {row.overall_percentage}%
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-
-                          {/* Remarks if any */}
-                          {customNote && (
-                            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '10px 14px', borderRadius: '8px', fontSize: '0.825rem', color: '#92400e' }}>
-                              <strong>Admin Remark:</strong> {customNote}
-                            </div>
-                          )}
-
-                          {/* Official Sign-off & Verification Footer */}
-                          <div className="report-card-footer">
-                            <div className="report-footer-disclaimer">
-                              <div>This is an official system-generated attendance report from the Hostel Attendance &amp; Management System (HAMS).</div>
-                              <div style={{ marginTop: '2px', color: '#94a3b8' }}>
-                                Generated on: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • HSH Integrated Engine
-                              </div>
-                            </div>
-                            <div className="report-signature-box">
-                              <div className="report-signature-line"></div>
-                              <div className="report-signature-text">Hostel Administrator / Rector</div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Pre-Send Attachment Option */}
-                    <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', color: '#0f172a' }}>
-                        <input
-                          type="checkbox"
-                          checked={attachReportImage}
-                          onChange={(e) => setAttachReportImage(e.target.checked)}
-                        />
-                        <span>🖼️ Attach Visual Report Card Image (PNG) with WhatsApp Notification</span>
-                      </label>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        (Parents &amp; students receive the visual card directly on their phones)
-                      </span>
+                      {renderOfficialReportCardBody(currentPreviewStudent)}
                     </div>
                   </div>
                 )}
@@ -2718,6 +2717,21 @@ export const AttendanceReportsView: React.FC = () => {
                   </div>
                 )}
 
+                {/* Pre-Send Attachment Option (Always visible on both tabs) */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', background: '#f8fafc', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', color: '#0f172a' }}>
+                    <input
+                      type="checkbox"
+                      checked={attachReportImage}
+                      onChange={(e) => setAttachReportImage(e.target.checked)}
+                    />
+                    <span>🖼️ Attach Personalized Report Card Image (PNG) with WhatsApp Notification</span>
+                  </label>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Each student/parent receives their own individual visual PNG report card
+                  </span>
+                </div>
+
                 {/* Optional Custom Note */}
                 <div className="filter-input-group">
                   <label>Add Optional Admin Remark / Note</label>
@@ -2783,7 +2797,7 @@ export const AttendanceReportsView: React.FC = () => {
                   {sendingNotifications ? (
                     <>
                       <RefreshCw size={16} className="animate-spin" />
-                      <span>Sending Reports...</span>
+                      <span>{sendProgress || 'Sending Reports...'}</span>
                     </>
                   ) : (
                     <>
