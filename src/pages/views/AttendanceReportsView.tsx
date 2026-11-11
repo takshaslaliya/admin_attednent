@@ -445,6 +445,20 @@ export const AttendanceReportsView: React.FC = () => {
     setActiveTemplateText(templates[key] || (previewRecipient === 'parent' ? DEFAULT_PARENT_TEMPLATE : DEFAULT_STUDENT_TEMPLATE));
   }, [previewRecipient, templates]);
 
+  const formatLocalYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const subtractMonthsSafe = (base: Date, months: number) => {
+    const target = new Date(base.getFullYear(), base.getMonth() - months, 1);
+    const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    target.setDate(Math.min(base.getDate(), lastDay));
+    return target;
+  };
+
   // Fetch session config & available 6-month bounds from backend
   const fetchSessionConfig = async () => {
     try {
@@ -453,10 +467,15 @@ export const AttendanceReportsView: React.FC = () => {
         const d = res.data.data;
         setMinDate(d.min_date);
         setMaxDate(d.max_date);
-        setAvailableMonths(d.available_months || []);
-        if (d.available_months?.length > 0) {
-          setSelectedMonth(d.available_months[0].value);
+        const serverMonths: Array<{ value: string; label: string }> = Array.isArray(d.available_months) ? [...d.available_months] : [];
+        if (!serverMonths.some((m) => m.value === 'last_6_months')) {
+          serverMonths.unshift({
+            value: 'last_6_months',
+            label: `📊 All Last 6 Months (${d.min_date} to ${d.max_date})`
+          });
         }
+        setAvailableMonths(serverMonths);
+        setSelectedMonth(serverMonths[0]?.value || 'last_6_months');
       }
     } catch (e) {
       console.warn('Failed to load session config, using defaults:', e);
@@ -466,7 +485,7 @@ export const AttendanceReportsView: React.FC = () => {
   const applyPresetRange = (presetKey: string) => {
     setSelectedPreset(presetKey);
     const today = new Date();
-    const end = today.toISOString().slice(0, 10);
+    const end = maxDate || formatLocalYMD(today);
     let start = end;
 
     if (presetKey === 'today') {
@@ -474,26 +493,22 @@ export const AttendanceReportsView: React.FC = () => {
     } else if (presetKey === 'yesterday') {
       const y = new Date(today);
       y.setDate(y.getDate() - 1);
-      start = y.toISOString().slice(0, 10);
+      start = formatLocalYMD(y);
       setEndDate(start);
       setStartDate(start);
       return;
     } else if (presetKey === '7days') {
       const d = new Date(today);
       d.setDate(d.getDate() - 7);
-      start = d.toISOString().slice(0, 10);
+      start = formatLocalYMD(d);
     } else if (presetKey === '30days') {
       const d = new Date(today);
       d.setDate(d.getDate() - 30);
-      start = d.toISOString().slice(0, 10);
+      start = formatLocalYMD(d);
     } else if (presetKey === '3months') {
-      const d = new Date(today);
-      d.setMonth(d.getMonth() - 3);
-      start = d.toISOString().slice(0, 10);
+      start = formatLocalYMD(subtractMonthsSafe(today, 3));
     } else if (presetKey === '6months') {
-      const d = new Date(today);
-      d.setMonth(d.getMonth() - 6);
-      start = d.toISOString().slice(0, 10);
+      start = minDate || formatLocalYMD(subtractMonthsSafe(today, 6));
     }
 
     setStartDate(start);
@@ -502,13 +517,24 @@ export const AttendanceReportsView: React.FC = () => {
 
   const handleMonthChange = (monthVal: string) => {
     setSelectedMonth(monthVal);
+    const todayStr = maxDate || formatLocalYMD(new Date());
+
+    if (monthVal === 'last_6_months') {
+      const sixMonthsAgoStr = minDate || formatLocalYMD(subtractMonthsSafe(new Date(), 6));
+      setStartDate(sixMonthsAgoStr);
+      setEndDate(todayStr);
+      return;
+    }
+
     const [y, m] = monthVal.split('-').map(Number);
     if (y && m) {
       const start = `${y}-${String(m).padStart(2, '0')}-01`;
       const lastDay = new Date(y, m, 0).getDate();
-      const end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      const monthEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      // Do not extend current month past today's date
+      const cappedEnd = monthEnd > todayStr && start <= todayStr ? todayStr : monthEnd;
       setStartDate(start);
-      setEndDate(end);
+      setEndDate(cappedEnd);
     }
   };
 
@@ -547,12 +573,19 @@ export const AttendanceReportsView: React.FC = () => {
     }
   };
 
-  // Auto-generate report when dates/session change
+  // Auto-generate report whenever filters change in preset or month mode
   useEffect(() => {
-    if (startDate && endDate) {
+    if (startDate && endDate && filterMode !== 'custom') {
       handleGenerateReport();
     }
-  }, [sessionType]);
+  }, [sessionType, startDate, endDate, floorFilter, filterMode]);
+
+  // In custom mode, still auto-refresh if sessionType or floorFilter toggles
+  useEffect(() => {
+    if (startDate && endDate && filterMode === 'custom') {
+      handleGenerateReport();
+    }
+  }, [sessionType, floorFilter]);
 
   // Robust Monthly Breakdown Fallback Helpers
   const getStudentBreakdown = (student: StudentDetail | null | undefined): MonthBreakdownItem[] => {
@@ -1496,11 +1529,11 @@ export const AttendanceReportsView: React.FC = () => {
                 const mode = e.target.value as any;
                 setFilterMode(mode);
                 if (mode === 'preset') applyPresetRange('30days');
-                else if (mode === 'month' && availableMonths.length > 0) handleMonthChange(availableMonths[0].value);
+                else if (mode === 'month') handleMonthChange('last_6_months');
               }}
             >
               <option value="preset">⚡ Quick Presets (7d / 30d / 6m)</option>
-              <option value="month">📅 Month Selector (Last 6 Months)</option>
+              <option value="month">📅 Last 6 Months &amp; Month Selector</option>
               <option value="custom">🛠️ Custom Date Range</option>
             </select>
           </div>
@@ -1524,13 +1557,16 @@ export const AttendanceReportsView: React.FC = () => {
 
           {filterMode === 'month' && (
             <div className="filter-input-group">
-              <label>Select Month</label>
+              <label>Select Range / Month</label>
               <select
                 className="filter-select"
                 value={selectedMonth}
                 onChange={(e) => handleMonthChange(e.target.value)}
               >
-                {availableMonths.map((m) => (
+                {(availableMonths.length > 0
+                  ? availableMonths
+                  : [{ value: 'last_6_months', label: '📊 All Last 6 Months (Current Date Back 6 Months)' }]
+                ).map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
                   </option>
