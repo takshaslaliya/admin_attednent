@@ -1265,6 +1265,21 @@
   color: #166534 !important;
 }
 
+.th-cat-lunch {
+  background: #ffedd5 !important; /* Soft Orange */
+  color: #9a3412 !important;
+}
+
+.th-cat-dinner {
+  background: #ede9fe !important; /* Soft Purple */
+  color: #5b21b6 !important;
+}
+
+.th-cat-night {
+  background: #e0e7ff !important; /* Soft Indigo */
+  color: #3730a3 !important;
+}
+
 .th-cat-other {
   background: #e9d5ff !important; /* Purple */
   color: #581c87 !important;

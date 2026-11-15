@@ -144,7 +144,7 @@ const PRESET_DATE_RANGES = [
   { key: '6months', label: 'Last 6 Months' },
 ];
 
-export const DEFAULT_PARENT_TEMPLATE = `🏛️ *SHREE SWAMINARAYAN GURUKUL HOSTEL*
+export const DEFAULT_PARENT_TEMPLATE = `🏛️ *HARI SAURABH HOSTEL*
 📋 *Official Attendance Report*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 Respected Parent/Guardian of *{student_name}*,
@@ -168,7 +168,7 @@ Here is the attendance report for the period *{start_date}* to *{end_date}*:
 _For queries, please contact the Hostel Warden / Administration._
 _Hostel Attendance & Management System (HAMS)_`;
 
-export const DEFAULT_STUDENT_TEMPLATE = `🏛️ *SHREE SWAMINARAYAN GURUKUL HOSTEL*
+export const DEFAULT_STUDENT_TEMPLATE = `🏛️ *HARI SAURABH HOSTEL*
 📋 *Official Attendance Report*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 Dear *{student_name}*,
@@ -401,10 +401,43 @@ export const AttendanceReportsView: React.FC = () => {
   const getSessionHeaderClass = (key: string) => {
     if (key === 'aarti') return 'th-cat-aarti';
     if (key === 'sabha') return 'th-cat-sabha';
+    if (key === 'lunch') return 'th-cat-lunch';
+    if (key === 'dinner') return 'th-cat-dinner';
+    if (key === 'night') return 'th-cat-night';
     if (key === 'dates') return 'th-cat-dates';
     if (key === 'year') return 'th-cat-year';
     return 'th-cat-other';
   };
+
+  const getSessionBgColor = (sKey: string) => {
+    if (sKey === 'aarti') return '#fffbeb';
+    if (sKey === 'sabha') return '#f0fdf4';
+    if (sKey === 'lunch') return '#fff7ed';
+    if (sKey === 'dinner') return '#faf5ff';
+    if (sKey === 'night') return '#eef2ff';
+    return '#f8fafc';
+  };
+
+  const getSessionTextColor = (sKey: string) => {
+    if (sKey === 'aarti') return '#9a3412';
+    if (sKey === 'sabha') return '#166534';
+    if (sKey === 'lunch') return '#c2410c';
+    if (sKey === 'dinner') return '#6b21a8';
+    if (sKey === 'night') return '#3730a3';
+    return '#0f172a';
+  };
+
+  const getSessionIcon = (sKey: string) => {
+    if (sKey === 'aarti') return '🪔';
+    if (sKey === 'sabha') return '📖';
+    if (sKey === 'lunch') return '🍲';
+    if (sKey === 'dinner') return '🍽️';
+    if (sKey === 'night') return '🌙';
+    return '📌';
+  };
+
+  // Matrix layout mode: 'stacked' (per-section tables) vs 'combined' (wide spreadsheet)
+  const [matrixLayoutMode, setMatrixLayoutMode] = useState<'stacked' | 'combined'>('stacked');
 
   // Available Rooms for filter dropdown
   const availableRooms = useMemo(() => {
@@ -908,6 +941,7 @@ export const AttendanceReportsView: React.FC = () => {
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
+        windowWidth: 1200,
       });
       return canvas.toDataURL('image/png');
     } catch (err) {
@@ -956,6 +990,7 @@ export const AttendanceReportsView: React.FC = () => {
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
+        windowWidth: 1200,
       });
       canvas.toBlob(async (blob) => {
         if (blob && (navigator.clipboard as any)?.write) {
@@ -1232,7 +1267,7 @@ export const AttendanceReportsView: React.FC = () => {
         <div className="report-card-logo-area">
           <div className="report-card-emblem">🏛️</div>
           <div className="report-card-title-group">
-            <h2>SHREE SWAMINARAYAN GURUKUL HOSTEL</h2>
+            <h2>Hari Saurabh Hostel</h2>
             <p>Official Attendance &amp; Punctuality Report Card</p>
           </div>
         </div>
@@ -1327,99 +1362,121 @@ export const AttendanceReportsView: React.FC = () => {
             </div>
           </div>
 
-          <div className="report-matrix-section">
-            <div className="report-matrix-title">
-              <FileSpreadsheet size={16} style={{ color: '#4f46e5' }} />
-              <span>Month-Wise Attendance Breakdown</span>
-            </div>
+          {/* Month-Wise Attendance Matrix: Render per-section tables so tables never cut off horizontally */}
+          {(() => {
+            const breakdownRows = getStudentBreakdown(student);
+            if (breakdownRows.length === 0) {
+              return (
+                <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                  No month-wise attendance breakdown available for the selected period.
+                </div>
+              );
+            }
 
-            <div className="report-matrix-table-wrap">
-              <table className="report-matrix-table">
-                <thead>
-                  <tr>
-                    <th className="th-cat-year">Year</th>
-                    <th className="th-cat-year">Period</th>
-                    <th className="th-cat-dates">Total Days</th>
-                    <th className="th-cat-dates">Leave Days</th>
-                    {activeSessionKeys.map((sKey) => {
-                      const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
-                      const sName = sOpt ? sOpt.label : sKey.toUpperCase();
-                      if (sKey === 'aarti') {
-                        return (
-                          <React.Fragment key={sKey}>
-                            <th className="th-cat-aarti">Aarti Attended</th>
-                            <th className="th-cat-aarti">Aarti %</th>
-                          </React.Fragment>
-                        );
-                      }
-                      if (sKey === 'sabha') {
-                        return (
-                          <React.Fragment key={sKey}>
-                            <th className="th-cat-sabha">Total Sabha</th>
-                            <th className="th-cat-sabha">Attended Sabha</th>
-                            <th className="th-cat-sabha">Sabha %</th>
-                          </React.Fragment>
-                        );
-                      }
-                      return (
-                        <React.Fragment key={sKey}>
-                          <th className={getSessionHeaderClass(sKey)}>Total {sName}</th>
-                          <th className={getSessionHeaderClass(sKey)}>Attended</th>
-                          <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
-                        </React.Fragment>
-                      );
-                    })}
-                    <th className="th-cat-year">Overall %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {getStudentBreakdown(student).map((row, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
-                      <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
-                      <td style={{ background: '#f0f9ff' }}>{row.total_days}</td>
-                      <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
-                        {row.leave_days}
-                      </td>
-                      {activeSessionKeys.map((sKey) => {
-                        const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
-                        const sPct = sData.percentage;
-                        const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
+            const isMultiSession = activeSessionKeys.length > 1;
 
-                        if (sKey === 'aarti') {
-                          return (
-                            <React.Fragment key={sKey}>
-                              <td style={{ background: '#fffbeb', fontWeight: 700, color: '#9a3412' }}>{sData.attended}</td>
-                              <td style={{ background: '#fffbeb', fontWeight: 800, color: pctColor }}>{sPct}%</td>
-                            </React.Fragment>
-                          );
-                        }
-                        if (sKey === 'sabha') {
-                          return (
-                            <React.Fragment key={sKey}>
-                              <td style={{ background: '#f0fdf4' }}>{sData.conducted}</td>
-                              <td style={{ background: '#f0fdf4', fontWeight: 700, color: '#166534' }}>{sData.attended}</td>
-                              <td style={{ background: '#f0fdf4', fontWeight: 800, color: pctColor }}>{sPct}%</td>
-                            </React.Fragment>
-                          );
-                        }
-                        return (
-                          <React.Fragment key={sKey}>
-                            <td style={{ background: '#faf5ff' }}>{sData.conducted}</td>
-                            <td style={{ background: '#faf5ff', fontWeight: 700, color: '#6b21a8' }}>{sData.attended}</td>
-                            <td style={{ background: '#faf5ff', fontWeight: 800, color: pctColor }}>{sPct}%</td>
-                          </React.Fragment>
-                        );
-                      })}
-                      <td style={{ fontWeight: 800, color: row.overall_percentage >= 75 ? '#15803d' : '#d97706', background: '#f8fafc' }}>
-                        {row.overall_percentage}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* 1. Overall Monthly Attendance Summary Table (Shown when multiple sessions are selected) */}
+                {isMultiSession && (
+                  <div className="report-matrix-section">
+                    <div className="report-matrix-title">
+                      <FileSpreadsheet size={16} style={{ color: '#4f46e5' }} />
+                      <span>📊 Overall Monthly Attendance Summary</span>
+                    </div>
+                    <div className="report-matrix-table-wrap">
+                      <table className="report-matrix-table">
+                        <thead>
+                          <tr>
+                            <th className="th-cat-year">Year</th>
+                            <th className="th-cat-year">Period</th>
+                            <th className="th-cat-dates">Total Days</th>
+                            <th className="th-cat-dates">Leave Days</th>
+                            <th className="th-cat-other">Total Conducted</th>
+                            <th className="th-cat-other">Total Attended</th>
+                            <th className="th-cat-year">Overall %</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {breakdownRows.map((row, idx) => {
+                            const oPct = row.overall_percentage;
+                            const pctColor = oPct >= 75 ? '#15803d' : oPct >= 50 ? '#d97706' : '#b91c1c';
+                            return (
+                              <tr key={idx}>
+                                <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
+                                <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
+                                <td style={{ background: '#f0f9ff' }}>{row.total_days}</td>
+                                <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
+                                  {row.leave_days}
+                                </td>
+                                <td style={{ background: '#faf5ff', fontWeight: 600 }}>{row.overall_conducted}</td>
+                                <td style={{ background: '#faf5ff', fontWeight: 700, color: '#4338ca' }}>{row.overall_attended}</td>
+                                <td style={{ background: '#fefce8', fontWeight: 800, color: pctColor }}>{oPct}%</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Dedicated Table for EACH Section (so table never cuts off horizontally) */}
+                {activeSessionKeys.map((sKey) => {
+                  const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                  const sName = sOpt ? sOpt.label : sKey.toUpperCase();
+                  const sIcon = getSessionIcon(sKey);
+                  const headerClass = getSessionHeaderClass(sKey);
+                  const bgColor = getSessionBgColor(sKey);
+                  const textColor = getSessionTextColor(sKey);
+
+                  return (
+                    <div key={sKey} className="report-matrix-section">
+                      <div className="report-matrix-title">
+                        <span style={{ fontSize: '1.05rem' }}>{sIcon}</span>
+                        <span>{sName} Attendance Breakdown</span>
+                      </div>
+                      <div className="report-matrix-table-wrap">
+                        <table className="report-matrix-table">
+                          <thead>
+                            <tr>
+                              <th className="th-cat-year">Year</th>
+                              <th className="th-cat-year">Period</th>
+                              <th className="th-cat-dates">Total Days</th>
+                              <th className="th-cat-dates">Leave Days</th>
+                              <th className={headerClass}>Total {sName}</th>
+                              <th className={headerClass}>{sName} Attended</th>
+                              <th className={headerClass}>{sName} %</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {breakdownRows.map((row, idx) => {
+                              const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
+                              const sPct = sData.percentage;
+                              const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
+                              return (
+                                <tr key={idx}>
+                                  <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
+                                  <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
+                                  <td style={{ background: '#f0f9ff' }}>{row.total_days}</td>
+                                  <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
+                                    {row.leave_days}
+                                  </td>
+                                  <td style={{ background: bgColor, fontWeight: 600 }}>{sData.conducted}</td>
+                                  <td style={{ background: bgColor, fontWeight: 700, color: textColor }}>{sData.attended}</td>
+                                  <td style={{ background: bgColor, fontWeight: 800, color: pctColor }}>{sPct}%</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {customNote && (
             <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '10px 14px', borderRadius: '8px', fontSize: '0.825rem', color: '#92400e' }}>
@@ -1429,9 +1486,9 @@ export const AttendanceReportsView: React.FC = () => {
 
           <div className="report-card-footer">
             <div className="report-footer-disclaimer">
-              <div>This is an official system-generated attendance report from the Hostel Attendance &amp; Management System (HAMS).</div>
+              <div>This is an official system-generated attendance report from Hari Saurabh Hostel (HSH).</div>
               <div style={{ marginTop: '2px', color: '#94a3b8' }}>
-                Generated on: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • HSH Integrated Engine
+                Generated on: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • Hari Saurabh Hostel Integrated Engine
               </div>
             </div>
             <div className="report-signature-box">
@@ -1454,13 +1511,13 @@ export const AttendanceReportsView: React.FC = () => {
             position: 'fixed',
             left: '-99999px',
             top: 0,
-            width: '860px',
+            width: '920px',
             pointerEvents: 'none',
             zIndex: -1,
             background: '#ffffff'
           }}
         >
-          <div ref={exportCardRef} className="official-report-card">
+          <div ref={exportCardRef} className="official-report-card" style={{ width: '920px', maxWidth: '920px' }}>
             {renderOfficialReportCardBody(exportingStudent)}
           </div>
         </div>
@@ -2165,6 +2222,43 @@ export const AttendanceReportsView: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                <button
+                  type="button"
+                  onClick={() => setMatrixLayoutMode('stacked')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: matrixLayoutMode === 'stacked' ? '#4f46e5' : 'transparent',
+                    color: matrixLayoutMode === 'stacked' ? '#ffffff' : '#475569',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  📋 Per-Section Tables
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMatrixLayoutMode('combined')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: matrixLayoutMode === 'combined' ? '#4f46e5' : 'transparent',
+                    color: matrixLayoutMode === 'combined' ? '#ffffff' : '#475569',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  📊 Combined Sheet
+                </button>
+              </div>
+
               <button className="btn-secondary" onClick={handleExportMatrixCSV} title="Export spreadsheet to CSV">
                 <Download size={14} />
                 <span>Export Matrix CSV</span>
@@ -2172,209 +2266,354 @@ export const AttendanceReportsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Month-Wise Matrix Spreadsheet Table */}
-          <div className="report-matrix-table-wrap">
-            <table className="report-matrix-table">
-              <thead>
-                {/* Header Category Row matching User's Color-Coded Sheet */}
-                <tr>
-                  <th className="th-cat-year" colSpan={1}>Year</th>
-                  <th className="th-cat-year" colSpan={1}>Period</th>
-                  <th className="th-cat-dates" colSpan={2}>Dates</th>
-                  {activeSessionKeys.map((sKey) => {
-                    const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
-                    const sName = sOpt ? sOpt.label : sKey.toUpperCase();
-                    if (sKey === 'aarti') {
-                      return (
-                        <React.Fragment key={sKey}>
-                          <th className="th-cat-aarti">AartiAttendance</th>
-                          <th className="th-cat-aarti">AartiPercentage</th>
-                        </React.Fragment>
-                      );
-                    }
-                    if (sKey === 'sabha') {
-                      return (
-                        <React.Fragment key={sKey}>
-                          <th className="th-cat-sabha">Sabhas</th>
-                          <th className="th-cat-sabha">SabhaAttendance</th>
-                          <th className="th-cat-sabha">SabhaPercentage</th>
-                        </React.Fragment>
-                      );
-                    }
-                    return (
-                      <React.Fragment key={sKey}>
-                        <th className={getSessionHeaderClass(sKey)}>{sName} Conducted</th>
-                        <th className={getSessionHeaderClass(sKey)}>{sName} Attended</th>
-                        <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
-                      </React.Fragment>
-                    );
-                  })}
-                  <th className="th-cat-year" colSpan={2}>Overall Attendance</th>
-                </tr>
-
-                {/* Sub-Header Column Labels */}
-                <tr>
-                  <th className="th-cat-year">Year</th>
-                  <th className="th-cat-year">Period</th>
-                  <th className="th-cat-dates">Total Days</th>
-                  <th className="th-cat-dates">Leave Days</th>
-                  {activeSessionKeys.map((sKey) => {
-                    const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
-                    const sName = sOpt ? sOpt.label : sKey.toUpperCase();
-                    if (sKey === 'aarti') {
-                      return (
-                        <React.Fragment key={sKey}>
-                          <th className="th-cat-aarti">Aarti Attended</th>
-                          <th className="th-cat-aarti">Aarti %</th>
-                        </React.Fragment>
-                      );
-                    }
-                    if (sKey === 'sabha') {
-                      return (
-                        <React.Fragment key={sKey}>
-                          <th className="th-cat-sabha">Total Sabha</th>
-                          <th className="th-cat-sabha">Attended Sabha</th>
-                          <th className="th-cat-sabha">Sabha %</th>
-                        </React.Fragment>
-                      );
-                    }
-                    return (
-                      <React.Fragment key={sKey}>
-                        <th className={getSessionHeaderClass(sKey)}>Total {sName}</th>
-                        <th className={getSessionHeaderClass(sKey)}>Attended</th>
-                        <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
-                      </React.Fragment>
-                    );
-                  })}
-                  <th className="th-cat-year">Conducted</th>
-                  <th className="th-cat-year">Overall %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayedMatrixRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6 + activeSessionKeys.length * 3} style={{ padding: '36px', color: '#64748b' }}>
-                      No month-wise attendance data found for the selected period.
-                    </td>
-                  </tr>
-                ) : (
-                  displayedMatrixRows.map((row, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
-                      <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
-                      <td style={{ background: '#f0f9ff' }}>{row.total_days.toLocaleString()}</td>
-                      <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
-                        {row.leave_days.toLocaleString()}
-                      </td>
-                      {activeSessionKeys.map((sKey) => {
-                        const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
-                        const sPct = sData.percentage;
-                        const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
-
-                        if (sKey === 'aarti') {
-                          return (
-                            <React.Fragment key={sKey}>
-                              <td style={{ background: '#fffbeb', fontWeight: 700, color: '#9a3412' }}>
-                                {sData.attended.toLocaleString()}
-                              </td>
-                              <td style={{ background: '#fffbeb', fontWeight: 800, color: pctColor }}>
-                                {sPct}%
-                              </td>
-                            </React.Fragment>
-                          );
-                        }
-
-                        if (sKey === 'sabha') {
-                          return (
-                            <React.Fragment key={sKey}>
-                              <td style={{ background: '#f0fdf4' }}>{sData.conducted.toLocaleString()}</td>
-                              <td style={{ background: '#f0fdf4', fontWeight: 700, color: '#166534' }}>
-                                {sData.attended.toLocaleString()}
-                              </td>
-                              <td style={{ background: '#f0fdf4', fontWeight: 800, color: pctColor }}>
-                                {sPct}%
-                              </td>
-                            </React.Fragment>
-                          );
-                        }
-
-                        return (
-                          <React.Fragment key={sKey}>
-                            <td style={{ background: '#faf5ff' }}>{sData.conducted.toLocaleString()}</td>
-                            <td style={{ background: '#faf5ff', fontWeight: 700, color: '#6b21a8' }}>
-                              {sData.attended.toLocaleString()}
+          {/* Month-Wise Matrix Tables: Per-Section Stacked View (Default) vs Combined Matrix View */}
+          {matrixLayoutMode === 'stacked' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Overall Monthly Attendance Table */}
+              {activeSessionKeys.length > 1 && (
+                <div className="report-matrix-section">
+                  <div className="report-matrix-title">
+                    <FileSpreadsheet size={16} style={{ color: '#4f46e5' }} />
+                    <span>📊 Overall Monthly Attendance Summary</span>
+                  </div>
+                  <div className="report-matrix-table-wrap">
+                    <table className="report-matrix-table">
+                      <thead>
+                        <tr>
+                          <th className="th-cat-year">Year</th>
+                          <th className="th-cat-year">Period</th>
+                          <th className="th-cat-dates">Total Days</th>
+                          <th className="th-cat-dates">Leave Days</th>
+                          <th className="th-cat-other">Total Conducted</th>
+                          <th className="th-cat-other">Total Attended</th>
+                          <th className="th-cat-year">Overall %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayedMatrixRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} style={{ padding: '24px', color: '#64748b' }}>
+                              No month-wise attendance data found.
                             </td>
-                            <td style={{ background: '#faf5ff', fontWeight: 800, color: pctColor }}>
-                              {sPct}%
-                            </td>
-                          </React.Fragment>
-                        );
-                      })}
-                      <td style={{ fontWeight: 600, background: '#f8fafc' }}>
-                        {row.overall_conducted.toLocaleString()}
-                      </td>
-                      <td style={{ fontWeight: 800, color: row.overall_percentage >= 75 ? '#15803d' : '#d97706', background: '#f8fafc' }}>
-                        {row.overall_percentage}%
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              {displayedMatrixRows.length > 0 && (
-                <tfoot>
+                          </tr>
+                        ) : (
+                          displayedMatrixRows.map((row, idx) => {
+                            const oPct = row.overall_percentage;
+                            const pctColor = oPct >= 75 ? '#15803d' : oPct >= 50 ? '#d97706' : '#b91c1c';
+                            return (
+                              <tr key={idx}>
+                                <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
+                                <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
+                                <td style={{ background: '#f0f9ff' }}>{row.total_days.toLocaleString()}</td>
+                                <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
+                                  {row.leave_days.toLocaleString()}
+                                </td>
+                                <td style={{ background: '#faf5ff', fontWeight: 600 }}>{row.overall_conducted.toLocaleString()}</td>
+                                <td style={{ background: '#faf5ff', fontWeight: 700, color: '#4338ca' }}>{row.overall_attended.toLocaleString()}</td>
+                                <td style={{ background: '#fefce8', fontWeight: 800, color: pctColor }}>{oPct}%</td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Individual Section Tables (Aarti, Sabha, Lunch, Dinner, Night) */}
+              {activeSessionKeys.map((sKey) => {
+                const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                const sName = sOpt ? sOpt.label : sKey.toUpperCase();
+                const sIcon = getSessionIcon(sKey);
+                const headerClass = getSessionHeaderClass(sKey);
+                const bgColor = getSessionBgColor(sKey);
+                const textColor = getSessionTextColor(sKey);
+
+                return (
+                  <div key={sKey} className="report-matrix-section">
+                    <div className="report-matrix-title">
+                      <span style={{ fontSize: '1.05rem' }}>{sIcon}</span>
+                      <span>{sName} Attendance Breakdown</span>
+                    </div>
+                    <div className="report-matrix-table-wrap">
+                      <table className="report-matrix-table">
+                        <thead>
+                          <tr>
+                            <th className="th-cat-year">Year</th>
+                            <th className="th-cat-year">Period</th>
+                            <th className="th-cat-dates">Total Days</th>
+                            <th className="th-cat-dates">Leave Days</th>
+                            <th className={headerClass}>Total {sName}</th>
+                            <th className={headerClass}>{sName} Attended</th>
+                            <th className={headerClass}>{sName} %</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayedMatrixRows.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} style={{ padding: '24px', color: '#64748b' }}>
+                                No attendance records found for {sName}.
+                              </td>
+                            </tr>
+                          ) : (
+                            displayedMatrixRows.map((row, idx) => {
+                              const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
+                              const sPct = sData.percentage;
+                              const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
+                              return (
+                                <tr key={idx}>
+                                  <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
+                                  <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
+                                  <td style={{ background: '#f0f9ff' }}>{row.total_days.toLocaleString()}</td>
+                                  <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
+                                    {row.leave_days.toLocaleString()}
+                                  </td>
+                                  <td style={{ background: bgColor, fontWeight: 600 }}>{sData.conducted.toLocaleString()}</td>
+                                  <td style={{ background: bgColor, fontWeight: 700, color: textColor }}>{sData.attended.toLocaleString()}</td>
+                                  <td style={{ background: bgColor, fontWeight: 800, color: pctColor }}>{sPct}%</td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                        {displayedMatrixRows.length > 0 && (
+                          <tfoot>
+                            <tr>
+                              <td colSpan={2} style={{ textAlign: 'right', fontWeight: 800 }}>TOTAL / AVERAGE</td>
+                              <td style={{ fontWeight: 800 }}>
+                                {displayedMatrixRows.reduce((acc, r) => acc + r.total_days, 0).toLocaleString()}
+                              </td>
+                              <td style={{ fontWeight: 800, color: '#0284c7' }}>
+                                {displayedMatrixRows.reduce((acc, r) => acc + r.leave_days, 0).toLocaleString()}
+                              </td>
+                              <td style={{ fontWeight: 800 }}>
+                                {displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.conducted || 0), 0).toLocaleString()}
+                              </td>
+                              <td style={{ fontWeight: 800, color: textColor }}>
+                                {displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.attended || 0), 0).toLocaleString()}
+                              </td>
+                              <td style={{ fontWeight: 800 }}>
+                                {(() => {
+                                  const totalCond = displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.conducted || 0), 0);
+                                  const totalAtt = displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.attended || 0), 0);
+                                  return totalCond > 0 ? Math.round((totalAtt / totalCond) * 100) : 0;
+                                })()}%
+                              </td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Month-Wise Matrix Spreadsheet Table */
+            <div className="report-matrix-table-wrap">
+              <table className="report-matrix-table">
+                <thead>
+                  {/* Header Category Row matching User's Color-Coded Sheet */}
                   <tr>
-                    <td colSpan={2} style={{ textAlign: 'right', fontWeight: 800 }}>TOTAL / AVERAGE</td>
-                    <td style={{ fontWeight: 800 }}>
-                      {displayedMatrixRows.reduce((acc, r) => acc + r.total_days, 0).toLocaleString()}
-                    </td>
-                    <td style={{ fontWeight: 800, color: '#0284c7' }}>
-                      {displayedMatrixRows.reduce((acc, r) => acc + r.leave_days, 0).toLocaleString()}
-                    </td>
+                    <th className="th-cat-year" colSpan={1}>Year</th>
+                    <th className="th-cat-year" colSpan={1}>Period</th>
+                    <th className="th-cat-dates" colSpan={2}>Dates</th>
                     {activeSessionKeys.map((sKey) => {
-                      const totalAtt = displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.attended || 0), 0);
-                      const totalCond = displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.conducted || 0), 0);
-                      const avgPct = totalCond > 0 ? Math.round((totalAtt / totalCond) * 100) : 0;
-
+                      const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                      const sName = sOpt ? sOpt.label : sKey.toUpperCase();
                       if (sKey === 'aarti') {
                         return (
                           <React.Fragment key={sKey}>
-                            <td style={{ fontWeight: 800, color: '#9a3412' }}>{totalAtt.toLocaleString()}</td>
-                            <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                            <th className="th-cat-aarti">AartiAttendance</th>
+                            <th className="th-cat-aarti">AartiPercentage</th>
                           </React.Fragment>
                         );
                       }
                       if (sKey === 'sabha') {
                         return (
                           <React.Fragment key={sKey}>
-                            <td style={{ fontWeight: 800 }}>{totalCond.toLocaleString()}</td>
-                            <td style={{ fontWeight: 800, color: '#166534' }}>{totalAtt.toLocaleString()}</td>
-                            <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                            <th className="th-cat-sabha">Sabhas</th>
+                            <th className="th-cat-sabha">SabhaAttendance</th>
+                            <th className="th-cat-sabha">SabhaPercentage</th>
                           </React.Fragment>
                         );
                       }
                       return (
                         <React.Fragment key={sKey}>
-                          <td style={{ fontWeight: 800 }}>{totalCond.toLocaleString()}</td>
-                          <td style={{ fontWeight: 800, color: '#6b21a8' }}>{totalAtt.toLocaleString()}</td>
-                          <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                          <th className={getSessionHeaderClass(sKey)}>{sName} Conducted</th>
+                          <th className={getSessionHeaderClass(sKey)}>{sName} Attended</th>
+                          <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
                         </React.Fragment>
                       );
                     })}
-                    <td style={{ fontWeight: 800 }}>
-                      {displayedMatrixRows.reduce((acc, r) => acc + r.overall_conducted, 0).toLocaleString()}
-                    </td>
-                    <td style={{ fontWeight: 800, color: '#4f46e5' }}>
-                      {(() => {
-                        const allCond = displayedMatrixRows.reduce((acc, r) => acc + r.overall_conducted, 0);
-                        const allAtt = displayedMatrixRows.reduce((acc, r) => acc + r.overall_attended, 0);
-                        return allCond > 0 ? Math.round((allAtt / allCond) * 100) : 0;
-                      })()}%
-                    </td>
+                    <th className="th-cat-year" colSpan={2}>Overall Attendance</th>
                   </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+
+                  {/* Sub-Header Column Labels */}
+                  <tr>
+                    <th className="th-cat-year">Year</th>
+                    <th className="th-cat-year">Period</th>
+                    <th className="th-cat-dates">Total Days</th>
+                    <th className="th-cat-dates">Leave Days</th>
+                    {activeSessionKeys.map((sKey) => {
+                      const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                      const sName = sOpt ? sOpt.label : sKey.toUpperCase();
+                      if (sKey === 'aarti') {
+                        return (
+                          <React.Fragment key={sKey}>
+                            <th className="th-cat-aarti">Aarti Attended</th>
+                            <th className="th-cat-aarti">Aarti %</th>
+                          </React.Fragment>
+                        );
+                      }
+                      if (sKey === 'sabha') {
+                        return (
+                          <React.Fragment key={sKey}>
+                            <th className="th-cat-sabha">Total Sabha</th>
+                            <th className="th-cat-sabha">Attended Sabha</th>
+                            <th className="th-cat-sabha">Sabha %</th>
+                          </React.Fragment>
+                        );
+                      }
+                      return (
+                        <React.Fragment key={sKey}>
+                          <th className={getSessionHeaderClass(sKey)}>Total {sName}</th>
+                          <th className={getSessionHeaderClass(sKey)}>Attended</th>
+                          <th className={getSessionHeaderClass(sKey)}>{sName} %</th>
+                        </React.Fragment>
+                      );
+                    })}
+                    <th className="th-cat-year">Conducted</th>
+                    <th className="th-cat-year">Overall %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedMatrixRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={6 + activeSessionKeys.length * 3} style={{ padding: '36px', color: '#64748b' }}>
+                        No month-wise attendance data found for the selected period.
+                      </td>
+                    </tr>
+                  ) : (
+                    displayedMatrixRows.map((row, idx) => (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: 700, background: '#fefce8' }}>{row.year}</td>
+                        <td style={{ fontWeight: 600, background: '#fefce8' }}>{row.period}</td>
+                        <td style={{ background: '#f0f9ff' }}>{row.total_days.toLocaleString()}</td>
+                        <td style={{ background: '#f0f9ff', color: row.leave_days > 0 ? '#0284c7' : '#64748b', fontWeight: 600 }}>
+                          {row.leave_days.toLocaleString()}
+                        </td>
+                        {activeSessionKeys.map((sKey) => {
+                          const sData = row.sessions[sKey] || { conducted: 0, attended: 0, percentage: 0 };
+                          const sPct = sData.percentage;
+                          const pctColor = sPct >= 75 ? '#15803d' : sPct >= 50 ? '#d97706' : '#b91c1c';
+
+                          if (sKey === 'aarti') {
+                            return (
+                              <React.Fragment key={sKey}>
+                                <td style={{ background: '#fffbeb', fontWeight: 700, color: '#9a3412' }}>
+                                  {sData.attended.toLocaleString()}
+                                </td>
+                                <td style={{ background: '#fffbeb', fontWeight: 800, color: pctColor }}>
+                                  {sPct}%
+                                </td>
+                              </React.Fragment>
+                            );
+                          }
+
+                          if (sKey === 'sabha') {
+                            return (
+                              <React.Fragment key={sKey}>
+                                <td style={{ background: '#f0fdf4' }}>{sData.conducted.toLocaleString()}</td>
+                                <td style={{ background: '#f0fdf4', fontWeight: 700, color: '#166534' }}>
+                                  {sData.attended.toLocaleString()}
+                                </td>
+                                <td style={{ background: '#f0fdf4', fontWeight: 800, color: pctColor }}>
+                                  {sPct}%
+                                </td>
+                              </React.Fragment>
+                            );
+                          }
+
+                          return (
+                            <React.Fragment key={sKey}>
+                              <td style={{ background: '#faf5ff' }}>{sData.conducted.toLocaleString()}</td>
+                              <td style={{ background: '#faf5ff', fontWeight: 700, color: '#6b21a8' }}>
+                                {sData.attended.toLocaleString()}
+                              </td>
+                              <td style={{ background: '#faf5ff', fontWeight: 800, color: pctColor }}>
+                                {sPct}%
+                              </td>
+                            </React.Fragment>
+                          );
+                        })}
+                        <td style={{ fontWeight: 600, background: '#f8fafc' }}>
+                          {row.overall_conducted.toLocaleString()}
+                        </td>
+                        <td style={{ fontWeight: 800, color: row.overall_percentage >= 75 ? '#15803d' : '#d97706', background: '#f8fafc' }}>
+                          {row.overall_percentage}%
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {displayedMatrixRows.length > 0 && (
+                  <tfoot>
+                    <tr>
+                      <td colSpan={2} style={{ textAlign: 'right', fontWeight: 800 }}>TOTAL / AVERAGE</td>
+                      <td style={{ fontWeight: 800 }}>
+                        {displayedMatrixRows.reduce((acc, r) => acc + r.total_days, 0).toLocaleString()}
+                      </td>
+                      <td style={{ fontWeight: 800, color: '#0284c7' }}>
+                        {displayedMatrixRows.reduce((acc, r) => acc + r.leave_days, 0).toLocaleString()}
+                      </td>
+                      {activeSessionKeys.map((sKey) => {
+                        const totalAtt = displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.attended || 0), 0);
+                        const totalCond = displayedMatrixRows.reduce((acc, r) => acc + (r.sessions[sKey]?.conducted || 0), 0);
+                        const avgPct = totalCond > 0 ? Math.round((totalAtt / totalCond) * 100) : 0;
+
+                        if (sKey === 'aarti') {
+                          return (
+                            <React.Fragment key={sKey}>
+                              <td style={{ fontWeight: 800, color: '#9a3412' }}>{totalAtt.toLocaleString()}</td>
+                              <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                            </React.Fragment>
+                          );
+                        }
+                        if (sKey === 'sabha') {
+                          return (
+                            <React.Fragment key={sKey}>
+                              <td style={{ fontWeight: 800 }}>{totalCond.toLocaleString()}</td>
+                              <td style={{ fontWeight: 800, color: '#166534' }}>{totalAtt.toLocaleString()}</td>
+                              <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                            </React.Fragment>
+                          );
+                        }
+                        return (
+                          <React.Fragment key={sKey}>
+                            <td style={{ fontWeight: 800 }}>{totalCond.toLocaleString()}</td>
+                            <td style={{ fontWeight: 800, color: '#6b21a8' }}>{totalAtt.toLocaleString()}</td>
+                            <td style={{ fontWeight: 800 }}>{avgPct}%</td>
+                          </React.Fragment>
+                        );
+                      })}
+                      <td style={{ fontWeight: 800 }}>
+                        {displayedMatrixRows.reduce((acc, r) => acc + r.overall_conducted, 0).toLocaleString()}
+                      </td>
+                      <td style={{ fontWeight: 800, color: '#4f46e5' }}>
+                        {(() => {
+                          const allCond = displayedMatrixRows.reduce((acc, r) => acc + r.overall_conducted, 0);
+                          const allAtt = displayedMatrixRows.reduce((acc, r) => acc + r.overall_attended, 0);
+                          return allCond > 0 ? Math.round((allAtt / allCond) * 100) : 0;
+                        })()}%
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
         </section>
       )}
 
