@@ -126,13 +126,19 @@ interface SummaryData {
   };
 }
 
-const SESSION_OPTIONS = [
-  { key: 'all', label: 'All Sessions', emoji: '✨' },
-  { key: 'aarti', label: 'Aarti', emoji: '🪔' },
-  { key: 'sabha', label: 'Sabha', emoji: '📖' },
-  { key: 'lunch', label: 'Lunch', emoji: '🍲' },
-  { key: 'dinner', label: 'Dinner', emoji: '🍽️' },
-  { key: 'night', label: 'Night', emoji: '🌙' },
+export interface SessionOptionItem {
+  key: string;
+  label: string;
+  emoji: string;
+  type?: 'all' | 'live' | 'oneday';
+  icon_name?: string;
+  session_date?: string;
+}
+
+const DEFAULT_SESSION_OPTIONS: SessionOptionItem[] = [
+  { key: 'all', label: 'All Sessions', emoji: '✨', type: 'all' },
+  { key: 'aarti', label: 'Aarti', emoji: '🪔', type: 'live' },
+  { key: 'night', label: 'Night', emoji: '🌙', type: 'live' },
 ];
 
 const PRESET_DATE_RANGES = [
@@ -356,6 +362,9 @@ export const AttendanceReportsView: React.FC = () => {
   const [previewStudentId, setPreviewStudentId] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Dynamic Session Options loaded from backend (Live Sessions + One-Day Attendance Sessions)
+  const [sessionOptions, setSessionOptions] = useState<SessionOptionItem[]>(DEFAULT_SESSION_OPTIONS);
+
   // Computed Session Values
   const sessionType = useMemo(() => {
     if (selectedSessions.includes('all') || selectedSessions.length === 0) return 'all';
@@ -365,16 +374,17 @@ export const AttendanceReportsView: React.FC = () => {
   const sessionLabel = useMemo(() => {
     if (selectedSessions.includes('all')) return 'All Sessions';
     return selectedSessions
-      .map((k) => SESSION_OPTIONS.find((s) => s.key === k)?.label || k.toUpperCase())
+      .map((k) => sessionOptions.find((s) => s.key === k)?.label || k.toUpperCase())
       .join(' + ');
-  }, [selectedSessions]);
+  }, [selectedSessions, sessionOptions]);
 
   const activeSessionKeys = useMemo(() => {
     if (selectedSessions.includes('all')) {
-      return ['aarti', 'sabha', 'lunch', 'dinner', 'night'];
+      const keys = sessionOptions.filter((o) => o.key !== 'all').map((o) => o.key);
+      return keys.length > 0 ? keys : ['aarti', 'night'];
     }
     return selectedSessions;
-  }, [selectedSessions]);
+  }, [selectedSessions, sessionOptions]);
 
   // Multi-Session Toggle Handler
   const handleToggleSession = (key: string) => {
@@ -391,8 +401,8 @@ export const AttendanceReportsView: React.FC = () => {
         return filtered.length === 0 ? ['all'] : filtered;
       }
       const updated = [...prev, key];
-      const individualKeys = SESSION_OPTIONS.filter((o) => o.key !== 'all').map((o) => o.key);
-      const hasAll = individualKeys.every((k) => updated.includes(k));
+      const individualKeys = sessionOptions.filter((o) => o.key !== 'all').map((o) => o.key);
+      const hasAll = individualKeys.length > 0 && individualKeys.every((k) => updated.includes(k));
       return hasAll ? ['all'] : updated;
     });
   };
@@ -400,10 +410,11 @@ export const AttendanceReportsView: React.FC = () => {
   // Header class selector for spreadsheet columns
   const getSessionHeaderClass = (key: string) => {
     if (key === 'aarti') return 'th-cat-aarti';
-    if (key === 'sabha') return 'th-cat-sabha';
-    if (key === 'lunch') return 'th-cat-lunch';
-    if (key === 'dinner') return 'th-cat-dinner';
+    if (key === 'sabha' || key === 'weekly_assembly') return 'th-cat-sabha';
+    if (key === 'lunch' || key === 'c_language_class') return 'th-cat-lunch';
+    if (key === 'dinner' || key === 'meeting') return 'th-cat-dinner';
     if (key === 'night') return 'th-cat-night';
+    if (key.startsWith('oneday_')) return 'th-cat-dates';
     if (key === 'dates') return 'th-cat-dates';
     if (key === 'year') return 'th-cat-year';
     return 'th-cat-other';
@@ -411,29 +422,34 @@ export const AttendanceReportsView: React.FC = () => {
 
   const getSessionBgColor = (sKey: string) => {
     if (sKey === 'aarti') return '#fffbeb';
-    if (sKey === 'sabha') return '#f0fdf4';
-    if (sKey === 'lunch') return '#fff7ed';
-    if (sKey === 'dinner') return '#faf5ff';
+    if (sKey === 'sabha' || sKey === 'weekly_assembly') return '#f0fdf4';
+    if (sKey === 'lunch' || sKey === 'c_language_class') return '#fff7ed';
+    if (sKey === 'dinner' || sKey === 'meeting') return '#faf5ff';
     if (sKey === 'night') return '#eef2ff';
+    if (sKey.startsWith('oneday_')) return '#f0f9ff';
     return '#f8fafc';
   };
 
   const getSessionTextColor = (sKey: string) => {
     if (sKey === 'aarti') return '#9a3412';
-    if (sKey === 'sabha') return '#166534';
-    if (sKey === 'lunch') return '#c2410c';
-    if (sKey === 'dinner') return '#6b21a8';
+    if (sKey === 'sabha' || sKey === 'weekly_assembly') return '#166534';
+    if (sKey === 'lunch' || sKey === 'c_language_class') return '#c2410c';
+    if (sKey === 'dinner' || sKey === 'meeting') return '#6b21a8';
     if (sKey === 'night') return '#3730a3';
+    if (sKey.startsWith('oneday_')) return '#0369a1';
     return '#0f172a';
   };
 
   const getSessionIcon = (sKey: string) => {
+    const opt = sessionOptions.find((o) => o.key === sKey);
+    if (opt?.emoji) return opt.emoji;
     if (sKey === 'aarti') return '🪔';
-    if (sKey === 'sabha') return '📖';
-    if (sKey === 'lunch') return '🍲';
-    if (sKey === 'dinner') return '🍽️';
+    if (sKey === 'sabha' || sKey === 'weekly_assembly') return '👥';
+    if (sKey === 'c_language_class') return '💻';
+    if (sKey === 'meeting') return '✨';
     if (sKey === 'night') return '🌙';
-    return '📌';
+    if (sKey.startsWith('oneday_')) return '📅';
+    return '📋';
   };
 
   // Matrix layout mode: 'stacked' (per-section tables) vs 'combined' (wide spreadsheet)
@@ -500,6 +516,20 @@ export const AttendanceReportsView: React.FC = () => {
         const d = res.data.data;
         setMinDate(d.min_date);
         setMaxDate(d.max_date);
+
+        // Dynamically load all active live sessions + one-day sessions from database
+        if (Array.isArray(d.sessions) && d.sessions.length > 0) {
+          const dynamicList: SessionOptionItem[] = d.sessions.map((s: any) => ({
+            key: String(s.key).toLowerCase(),
+            label: s.name || s.label || s.key,
+            emoji: s.emoji || getSessionIcon(s.key),
+            type: s.type || (s.key === 'all' ? 'all' : s.key.startsWith('oneday_') ? 'oneday' : 'live'),
+            icon_name: s.icon_name,
+            session_date: s.session_date
+          }));
+          setSessionOptions(dynamicList);
+        }
+
         const serverMonths: Array<{ value: string; label: string }> = Array.isArray(d.available_months) ? [...d.available_months] : [];
         if (!serverMonths.some((m) => m.value === 'last_6_months')) {
           serverMonths.unshift({
@@ -1163,7 +1193,7 @@ export const AttendanceReportsView: React.FC = () => {
     if (!displayedMatrixRows || displayedMatrixRows.length === 0) return;
 
     const sessionHeaderNames = activeSessionKeys.map((k) => {
-      const opt = SESSION_OPTIONS.find((o) => o.key === k);
+      const opt = sessionOptions.find((o) => o.key === k);
       return opt ? opt.label : k.toUpperCase();
     });
 
@@ -1423,7 +1453,7 @@ export const AttendanceReportsView: React.FC = () => {
 
                 {/* 2. Dedicated Table for EACH Section (so table never cuts off horizontally) */}
                 {activeSessionKeys.map((sKey) => {
-                  const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                  const sOpt = sessionOptions.find((o) => o.key === sKey);
                   const sName = sOpt ? sOpt.label : sKey.toUpperCase();
                   const sIcon = getSessionIcon(sKey);
                   const headerClass = getSessionHeaderClass(sKey);
@@ -1555,7 +1585,7 @@ export const AttendanceReportsView: React.FC = () => {
             </div>
           </div>
           <div className="session-pills-row">
-            {SESSION_OPTIONS.map((opt) => {
+            {sessionOptions.map((opt) => {
               const isAll = opt.key === 'all';
               const isSelected = isAll ? selectedSessions.includes('all') : (!selectedSessions.includes('all') && selectedSessions.includes(opt.key));
               return (
@@ -2321,9 +2351,9 @@ export const AttendanceReportsView: React.FC = () => {
                 </div>
               )}
 
-              {/* Individual Section Tables (Aarti, Sabha, Lunch, Dinner, Night) */}
+              {/* Individual Section Tables (All dynamic live + one-day sessions) */}
               {activeSessionKeys.map((sKey) => {
-                const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                const sOpt = sessionOptions.find((o) => o.key === sKey);
                 const sName = sOpt ? sOpt.label : sKey.toUpperCase();
                 const sIcon = getSessionIcon(sKey);
                 const headerClass = getSessionHeaderClass(sKey);
@@ -2420,7 +2450,7 @@ export const AttendanceReportsView: React.FC = () => {
                     <th className="th-cat-year" colSpan={1}>Period</th>
                     <th className="th-cat-dates" colSpan={2}>Dates</th>
                     {activeSessionKeys.map((sKey) => {
-                      const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                      const sOpt = sessionOptions.find((o) => o.key === sKey);
                       const sName = sOpt ? sOpt.label : sKey.toUpperCase();
                       if (sKey === 'aarti') {
                         return (
@@ -2457,7 +2487,7 @@ export const AttendanceReportsView: React.FC = () => {
                     <th className="th-cat-dates">Total Days</th>
                     <th className="th-cat-dates">Leave Days</th>
                     {activeSessionKeys.map((sKey) => {
-                      const sOpt = SESSION_OPTIONS.find((o) => o.key === sKey);
+                      const sOpt = sessionOptions.find((o) => o.key === sKey);
                       const sName = sOpt ? sOpt.label : sKey.toUpperCase();
                       if (sKey === 'aarti') {
                         return (
