@@ -12,7 +12,9 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Globe
 } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { HamsCard } from '../../components/HamsCard';
@@ -119,6 +121,8 @@ export const FloorStringsView: React.FC = () => {
   }, [floors, searchQuery]);
 
   const activeCount = floors.filter(f => f.has_string).length;
+  const globalFloor = floors.find(f => f.floor_id === 0) || (floors.length > 0 ? floors[0] : null);
+  const globalStringValue = globalFloor?.string_value || 'FLR0-QFPH-HEYE';
 
   return (
     <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1400px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
@@ -371,6 +375,165 @@ export const FloorStringsView: React.FC = () => {
         </div>
       )}
 
+      {/* 🌟 GLOBAL ATTENDANCE SECURITY STRING SPOTLIGHT */}
+      {globalFloor && (
+        <div style={{
+          background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)',
+          borderRadius: '18px',
+          padding: '24px 28px',
+          color: '#ffffff',
+          boxShadow: '0 10px 25px -5px rgba(49, 46, 129, 0.4), 0 8px 10px -6px rgba(49, 46, 129, 0.2)',
+          border: '1.5px solid #6366f1',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)'
+              }}>
+                <Sparkles size={24} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                    Global Attendance Security String
+                  </h3>
+                  <span style={{
+                    backgroundColor: 'rgba(245, 158, 11, 0.25)',
+                    color: '#fef3c7',
+                    border: '1px solid rgba(245, 158, 11, 0.5)',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
+                  }}>
+                    🌟 Aarti &amp; Sabha (All Students)
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#c7d2fe' }}>
+                  Configured across <strong>ALL ESP32 beacons</strong> in the hostel for Global Sessions. Any student from any floor matches this string.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                onClick={() => toggleReveal(0)}
+                style={{
+                  padding: '8px 14px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {revealedFloors[0] ? <EyeOff size={14} /> : <Eye size={14} />}
+                {revealedFloors[0] ? 'Hide String' : 'Preview String'}
+              </button>
+
+              <button
+                onClick={() => copyToClipboard(globalStringValue, 0)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: copiedFloorId === 0 ? '#10b981' : '#f59e0b',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {copiedFloorId === 0 ? <Check size={14} /> : <Copy size={14} />}
+                {copiedFloorId === 0 ? 'Copied Global String!' : 'Copy Global String'}
+              </button>
+            </div>
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '12px',
+            backgroundColor: 'rgba(15, 23, 42, 0.5)',
+            padding: '14px 18px',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Active Global String (Floor 0)
+              </div>
+              <div style={{
+                fontFamily: 'monospace',
+                fontSize: '16px',
+                fontWeight: 800,
+                color: '#38bdf8',
+                marginTop: '4px',
+                letterSpacing: '0.05em'
+              }}>
+                {revealedFloors[0] ? globalStringValue : '••••••••••••••••'}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Shared Global Hardware ID
+              </div>
+              <div style={{
+                fontFamily: 'monospace',
+                fontSize: '14px',
+                fontWeight: 800,
+                color: '#facc15',
+                marginTop: '4px'
+              }}>
+                HSH_GLOBAL
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                ESP32 Arduino Firmware Code
+              </div>
+              <div style={{
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                color: '#e2e8f0',
+                marginTop: '4px',
+                backgroundColor: 'rgba(0,0,0,0.3)',
+                padding: '4px 8px',
+                borderRadius: '6px'
+              }}>
+                #define GLOBAL_STRING "{globalStringValue}"
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search & Filter Bar */}
       <div style={{
         display: 'flex',
@@ -424,6 +587,7 @@ export const FloorStringsView: React.FC = () => {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
           {filteredFloors.map((floor) => {
+            const isGlobal = floor.floor_id === 0;
             const hasString = floor.has_string && floor.string_value;
             const isRevealed = Boolean(revealedFloors[floor.floor_id]);
             const displayString = hasString 
@@ -431,7 +595,16 @@ export const FloorStringsView: React.FC = () => {
               : 'No string configured';
 
             return (
-              <HamsCard key={floor.floor_id} padding="24px" className="floor-string-card">
+              <HamsCard 
+                key={floor.floor_id} 
+                padding="24px" 
+                className="floor-string-card"
+                style={isGlobal ? {
+                  border: '2px solid #818cf8',
+                  boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.15)',
+                  backgroundColor: '#faf5ff'
+                } : undefined}
+              >
                 {/* Floor Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -439,23 +612,44 @@ export const FloorStringsView: React.FC = () => {
                       width: '40px',
                       height: '40px',
                       borderRadius: '10px',
-                      backgroundColor: hasString ? '#e0e7ff' : '#f1f5f9',
-                      color: hasString ? '#4338ca' : '#64748b',
+                      background: isGlobal 
+                        ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                        : (hasString ? '#e0e7ff' : '#f1f5f9'),
+                      color: isGlobal || !hasString ? '#ffffff' : '#4338ca',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontWeight: 800,
-                      fontSize: '15px'
+                      fontSize: '15px',
+                      boxShadow: isGlobal ? '0 4px 10px rgba(245, 158, 11, 0.3)' : 'none'
                     }}>
                       F{floor.floor_id}
                     </div>
                     <div>
-                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
-                        {floor.floor_name}
-                      </h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                          {floor.floor_name}
+                        </h3>
+                        {isGlobal && (
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            color: '#92400e',
+                            backgroundColor: '#fef3c7',
+                            border: '1px solid #fde68a',
+                            padding: '2px 7px',
+                            borderRadius: '6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}>
+                            🌟 Global String
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                         <Radio size={12} />
-                        {floor.device_name || 'ESP32 Beacon'}
+                        {floor.device_name || (isGlobal ? 'Hostel_Global_Hall / All ESP32s' : 'ESP32 Beacon')}
                       </div>
                     </div>
                   </div>
@@ -480,14 +674,14 @@ export const FloorStringsView: React.FC = () => {
 
                 {/* String Box */}
                 <div style={{
-                  backgroundColor: hasString ? '#f8fafc' : '#fdf2f8',
-                  border: `1px solid ${hasString ? '#e2e8f0' : '#fbcfe8'}`,
+                  backgroundColor: hasString ? (isGlobal ? '#ffffff' : '#f8fafc') : '#fdf2f8',
+                  border: `1px solid ${hasString ? (isGlobal ? '#c7d2fe' : '#e2e8f0') : '#fbcfe8'}`,
                   borderRadius: '12px',
                   padding: '16px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Floor Security String
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: isGlobal ? '#4f46e5' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {isGlobal ? '🌟 Global Session String (All ESP32s)' : 'Floor Security String'}
                     </span>
                     {hasString && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
