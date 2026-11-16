@@ -1,14 +1,14 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { 
-  KeyRound, 
-  RefreshCw, 
-  Copy, 
-  Check, 
-  Search, 
-  ShieldCheck, 
-  Layers, 
-  Radio, 
-  Code, 
+import {
+  KeyRound,
+  RefreshCw,
+  Copy,
+  Check,
+  Search,
+  ShieldCheck,
+  Layers,
+  Radio,
+  Code,
   ExternalLink,
   Eye,
   EyeOff,
@@ -112,7 +112,7 @@ export const FloorStringsView: React.FC = () => {
   const filteredFloors = useMemo(() => {
     if (!searchQuery.trim()) return floors;
     const q = searchQuery.toLowerCase().trim();
-    return floors.filter(f => 
+    return floors.filter(f =>
       f.floor_name?.toLowerCase().includes(q) ||
       String(f.floor_id).includes(q) ||
       (f.string_value && f.string_value.toLowerCase().includes(q)) ||
@@ -126,7 +126,7 @@ export const FloorStringsView: React.FC = () => {
 
   return (
     <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1400px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-      
+
       {/* Toast Alert */}
       {notification && (
         <div style={{
@@ -238,7 +238,7 @@ export const FloorStringsView: React.FC = () => {
 
       {/* Overview Stat Cards & API Info */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-        
+
         {/* Total Floors Card */}
         <HamsCard padding="20px">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -590,14 +590,14 @@ export const FloorStringsView: React.FC = () => {
             const isGlobal = floor.floor_id === 0;
             const hasString = floor.has_string && floor.string_value;
             const isRevealed = Boolean(revealedFloors[floor.floor_id]);
-            const displayString = hasString 
+            const displayString = hasString
               ? (isRevealed ? floor.string_value : '••••••••••••••••')
               : 'No string configured';
 
             return (
-              <HamsCard 
-                key={floor.floor_id} 
-                padding="24px" 
+              <HamsCard
+                key={floor.floor_id}
+                padding="24px"
                 className="floor-string-card"
                 style={isGlobal ? {
                   border: '2px solid #818cf8',
@@ -612,8 +612,8 @@ export const FloorStringsView: React.FC = () => {
                       width: '40px',
                       height: '40px',
                       borderRadius: '10px',
-                      background: isGlobal 
-                        ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                      background: isGlobal
+                        ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
                         : (hasString ? '#e0e7ff' : '#f1f5f9'),
                       color: isGlobal || !hasString ? '#ffffff' : '#4338ca',
                       display: 'flex',

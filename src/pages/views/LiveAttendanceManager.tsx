@@ -124,6 +124,9 @@ interface DayScheduleSlot {
   startTime: string;
   endTime: string;
   lateTime?: string | null;
+  phase2StartTime?: string | null;
+  phase2EndTime?: string | null;
+  phase2LateTime?: string | null;
 }
 
 const ALL_WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -177,7 +180,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
       days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       startTime: '21:00',
       endTime: '21:30',
-      lateTime: null
+      lateTime: null,
+      phase2StartTime: '07:25',
+      phase2EndTime: '07:30',
+      phase2LateTime: null
     }
   ]);
 
@@ -205,7 +211,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
       days: unassignedDays,
       startTime: startTime || '21:00',
       endTime: endTime || '21:30',
-      lateTime: lateTime || null
+      lateTime: lateTime || null,
+      phase2StartTime: phase2StartTime || '07:25',
+      phase2EndTime: phase2EndTime || '07:30',
+      phase2LateTime: phase2LateTime || null
     };
 
     setDaySchedules(prev => [...prev, newSlot]);
@@ -228,7 +237,11 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     }));
   };
 
-  const handleSlotTimeChange = (slotId: string, field: 'startTime' | 'endTime' | 'lateTime', value: any) => {
+  const handleSlotTimeChange = (
+    slotId: string,
+    field: 'startTime' | 'endTime' | 'lateTime' | 'phase2StartTime' | 'phase2EndTime' | 'phase2LateTime',
+    value: any
+  ) => {
     setDaySchedules(prev => prev.map(slot => {
       if (slot.id !== slotId) return slot;
       return { ...slot, [field]: value };
@@ -348,7 +361,21 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         }
 
         if (d.day_schedules && Array.isArray(d.day_schedules) && d.day_schedules.length > 0) {
-          setDaySchedules(d.day_schedules);
+          const loadedSlots: DayScheduleSlot[] = d.day_schedules.map((s: any) => ({
+            id: s.id || ('slot_' + Math.random().toString(36).slice(2, 7)),
+            days: Array.isArray(s.days) ? s.days : [],
+            startTime: (s.startTime || s.start_time || d.start_time || '21:00').slice(0, 5),
+            endTime: (s.endTime || s.end_time || d.end_time || '21:30').slice(0, 5),
+            lateTime: (s.lateTime !== undefined ? s.lateTime : (s.late_time !== undefined ? s.late_time : d.late_time))
+              ? String(s.lateTime || s.late_time || d.late_time).slice(0, 5)
+              : null,
+            phase2StartTime: (s.phase2StartTime || s.phase2_start_time || d.phase2_start_time || '07:25').slice(0, 5),
+            phase2EndTime: (s.phase2EndTime || s.phase2_end_time || d.phase2_end_time || '07:30').slice(0, 5),
+            phase2LateTime: (s.phase2LateTime !== undefined ? s.phase2LateTime : (s.phase2_late_time !== undefined ? s.phase2_late_time : d.phase2_late_time))
+              ? String(s.phase2LateTime || s.phase2_late_time || d.phase2_late_time).slice(0, 5)
+              : null
+          }));
+          setDaySchedules(loadedSlots);
         } else {
           setDaySchedules([
             {
@@ -356,7 +383,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
               startTime: (d.start_time || '21:00').slice(0, 5),
               endTime: (d.end_time || '21:30').slice(0, 5),
-              lateTime: d.late_time ? d.late_time.slice(0, 5) : null
+              lateTime: d.late_time ? d.late_time.slice(0, 5) : null,
+              phase2StartTime: d.phase2_start_time ? d.phase2_start_time.slice(0, 5) : '07:25',
+              phase2EndTime: d.phase2_end_time ? d.phase2_end_time.slice(0, 5) : '07:30',
+              phase2LateTime: d.phase2_late_time ? d.phase2_late_time.slice(0, 5) : null
             }
           ]);
         }
@@ -480,43 +510,52 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     const sTime = primarySlot ? primarySlot.startTime : startTime;
     const eTime = primarySlot ? primarySlot.endTime : endTime;
     const lTime = primarySlot ? primarySlot.lateTime : lateTime;
+    const p2StartTimeVal = hasMultipleAttendance ? (primarySlot?.phase2StartTime || phase2StartTime) : null;
+    const p2EndTimeVal = hasMultipleAttendance ? (primarySlot?.phase2EndTime || phase2EndTime) : null;
+    const p2LateTimeVal = hasMultipleAttendance ? (primarySlot?.phase2LateTime !== undefined ? primarySlot.phase2LateTime : phase2LateTime) : null;
 
     // Validate Multiple Attendance Windows (Two-Phase)
     if (hasMultipleAttendance) {
-      if (!phase2StartTime || !phase2EndTime) {
-        alert('Please specify both Start Time and End Time for the Second Attendance Window.');
-        return;
-      }
-      const [sh1, sm1] = sTime.split(':').map(Number);
-      const [eh1, em1] = eTime.split(':').map(Number);
-      const [sh2, sm2] = phase2StartTime.split(':').map(Number);
-      const [eh2, em2] = phase2EndTime.split(':').map(Number);
-      const w1Start = sh1 * 60 + sm1;
-      const w1End = eh1 * 60 + em1;
-      const w2Start = sh2 * 60 + sm2;
-      const w2End = eh2 * 60 + em2;
-
-      if (w2Start < w1End) {
-        alert(`Validation Error: Second Attendance Window Start Time (${phase2StartTime}) must start AFTER First Attendance Window End Time (${eTime})!`);
-        return;
-      }
-      if (w2End <= w2Start) {
-        alert(`Validation Error: Second Attendance Window End Time (${phase2EndTime}) must be AFTER its Start Time (${phase2StartTime})!`);
-        return;
-      }
-      if (phase2LateTime) {
-        const [lh2, lm2] = phase2LateTime.split(':').map(Number);
-        const late2 = lh2 * 60 + lm2;
-        if (late2 < w2Start || late2 > w2End) {
-          alert('Second Attendance Window Late Cutoff must fall between Window 2 Start and End time.');
+      for (let i = 0; i < daySchedules.length; i++) {
+        const slot = daySchedules[i];
+        const p2s = slot.phase2StartTime || phase2StartTime;
+        const p2e = slot.phase2EndTime || phase2EndTime;
+        if (!p2s || !p2e) {
+          alert(`Rule #${i + 1}: Please specify both Start Time and End Time for the Second Attendance Window.`);
           return;
+        }
+        const [sh1, sm1] = slot.startTime.split(':').map(Number);
+        const [eh1, em1] = slot.endTime.split(':').map(Number);
+        const [sh2, sm2] = p2s.split(':').map(Number);
+        const [eh2, em2] = p2e.split(':').map(Number);
+        const w1Start = sh1 * 60 + sm1;
+        const w1End = eh1 * 60 + em1;
+        const w2Start = sh2 * 60 + sm2;
+        const w2End = eh2 * 60 + em2;
+
+        if (w1Start < w1End && w2Start < w1End) {
+          alert(`Rule #${i + 1} Validation Error: Second Attendance Window Start Time (${p2s}) must start AFTER First Attendance Window End Time (${slot.endTime})!`);
+          return;
+        }
+        if (w2End <= w2Start) {
+          alert(`Rule #${i + 1} Validation Error: Second Attendance Window End Time (${p2e}) must be AFTER its Start Time (${p2s})!`);
+          return;
+        }
+        const p2l = slot.phase2LateTime !== undefined && slot.phase2LateTime !== null ? slot.phase2LateTime : phase2LateTime;
+        if (p2l) {
+          const [lh2, lm2] = p2l.split(':').map(Number);
+          const late2 = lh2 * 60 + lm2;
+          if (late2 < w2Start || late2 > w2End) {
+            alert(`Rule #${i + 1}: Second Attendance Window Late Cutoff must fall between Window 2 Start and End time.`);
+            return;
+          }
         }
       }
     }
 
     // Validate that autoMessageTime is after endTime
     if (autoMessageTime && autoMessageTime.trim()) {
-      const effectiveEndTime = (hasMultipleAttendance && phase2EndTime) ? phase2EndTime : eTime;
+      const effectiveEndTime = (hasMultipleAttendance && p2EndTimeVal) ? p2EndTimeVal : eTime;
       const [eh, em] = effectiveEndTime.split(':').map(Number);
       const [mh, mm] = autoMessageTime.split(':').map(Number);
       const [sh, sm] = sTime.split(':').map(Number);
@@ -538,9 +577,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         endTime: eTime,
         lateTime: lTime,
         hasMultipleAttendance: hasMultipleAttendance,
-        phase2StartTime: hasMultipleAttendance ? phase2StartTime : null,
-        phase2EndTime: hasMultipleAttendance ? phase2EndTime : null,
-        phase2LateTime: hasMultipleAttendance ? phase2LateTime : null,
+        phase2StartTime: p2StartTimeVal,
+        phase2EndTime: p2EndTimeVal,
+        phase2LateTime: p2LateTimeVal,
         daySchedules: daySchedules,
         linkedSessionKey: linkedSessionKey,
         autoMessage: alertsConfig.absent.student_message,
@@ -1347,7 +1386,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                         <input
                           type="time"
                           value={phase2StartTime}
-                          onChange={e => setPhase2StartTime(e.target.value)}
+                          onChange={e => {
+                            setPhase2StartTime(e.target.value);
+                            if (daySchedules.length > 0) handleSlotTimeChange(daySchedules[0].id, 'phase2StartTime', e.target.value);
+                          }}
                           style={{ height: '42px', borderRadius: '8px' }}
                         />
                       </div>
@@ -1356,7 +1398,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                         <input
                           type="time"
                           value={phase2EndTime}
-                          onChange={e => setPhase2EndTime(e.target.value)}
+                          onChange={e => {
+                            setPhase2EndTime(e.target.value);
+                            if (daySchedules.length > 0) handleSlotTimeChange(daySchedules[0].id, 'phase2EndTime', e.target.value);
+                          }}
                           style={{ height: '42px', borderRadius: '8px' }}
                         />
                       </div>
@@ -1367,7 +1412,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                       <input
                         type="time"
                         value={phase2LateTime || ''}
-                        onChange={e => setPhase2LateTime(e.target.value || null)}
+                        onChange={e => {
+                          setPhase2LateTime(e.target.value || null);
+                          if (daySchedules.length > 0) handleSlotTimeChange(daySchedules[0].id, 'phase2LateTime', e.target.value || null);
+                        }}
                         style={{ height: '42px', borderRadius: '8px' }}
                       />
                     </div>
@@ -1490,37 +1538,167 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                     </div>
 
                     {/* Time Pickers for this slot */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', alignItems: 'flex-end' }}>
-                      <div className="time-input-field" style={{ margin: 0 }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>START TIME</label>
-                        <input
-                          type="time"
-                          value={slot.startTime}
-                          onChange={e => handleSlotTimeChange(slot.id, 'startTime', e.target.value)}
-                          style={{ width: '100%', height: '42px', borderRadius: '8px' }}
-                        />
-                      </div>
+                    {hasMultipleAttendance ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', marginTop: '6px' }}>
+                        {/* 1st Attendance Window for this Rule */}
+                        <div style={{
+                          backgroundColor: '#ffffff',
+                          border: '1.5px solid #818cf8',
+                          borderRadius: '12px',
+                          padding: '14px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <span style={{
+                              backgroundColor: '#4f46e5',
+                              color: '#ffffff',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              padding: '3px 8px',
+                              borderRadius: '6px'
+                            }}>
+                              1️⃣ First Attendance Window
+                            </span>
+                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Initial Check-in</span>
+                          </div>
 
-                      <div className="time-input-field" style={{ margin: 0 }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>END TIME</label>
-                        <input
-                          type="time"
-                          value={slot.endTime}
-                          onChange={e => handleSlotTimeChange(slot.id, 'endTime', e.target.value)}
-                          style={{ width: '100%', height: '42px', borderRadius: '8px' }}
-                        />
-                      </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                            <div className="time-input-field" style={{ margin: 0 }}>
+                              <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569' }}>START TIME</label>
+                              <input
+                                type="time"
+                                value={slot.startTime}
+                                onChange={e => {
+                                  handleSlotTimeChange(slot.id, 'startTime', e.target.value);
+                                  if (index === 0) setStartTime(e.target.value);
+                                }}
+                                style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                              />
+                            </div>
+                            <div className="time-input-field" style={{ margin: 0 }}>
+                              <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569' }}>END TIME</label>
+                              <input
+                                type="time"
+                                value={slot.endTime}
+                                onChange={e => {
+                                  handleSlotTimeChange(slot.id, 'endTime', e.target.value);
+                                  if (index === 0) setEndTime(e.target.value);
+                                }}
+                                style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                              />
+                            </div>
+                          </div>
 
-                      <div className="time-input-field" style={{ margin: 0 }}>
-                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>LATE CUTOFF (OPTIONAL)</label>
-                        <input
-                          type="time"
-                          value={slot.lateTime || ''}
-                          onChange={e => handleSlotTimeChange(slot.id, 'lateTime', e.target.value || null)}
-                          style={{ width: '100%', height: '42px', borderRadius: '8px' }}
-                        />
+                          <div className="time-input-field" style={{ margin: 0 }}>
+                            <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569' }}>LATE CUTOFF (OPTIONAL)</label>
+                            <input
+                              type="time"
+                              value={slot.lateTime || ''}
+                              onChange={e => {
+                                handleSlotTimeChange(slot.id, 'lateTime', e.target.value || null);
+                                if (index === 0) setLateTime(e.target.value || null);
+                              }}
+                              style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* 2nd Attendance Window for this Rule */}
+                        <div style={{
+                          backgroundColor: '#ffffff',
+                          border: '1.5px solid #c084fc',
+                          borderRadius: '12px',
+                          padding: '14px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <span style={{
+                              backgroundColor: '#7c3aed',
+                              color: '#ffffff',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              padding: '3px 8px',
+                              borderRadius: '6px'
+                            }}>
+                              2️⃣ Second Attendance Window
+                            </span>
+                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Second Check-in</span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                            <div className="time-input-field" style={{ margin: 0 }}>
+                              <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569' }}>START TIME</label>
+                              <input
+                                type="time"
+                                value={slot.phase2StartTime || phase2StartTime || '07:25'}
+                                onChange={e => {
+                                  handleSlotTimeChange(slot.id, 'phase2StartTime', e.target.value);
+                                  if (index === 0) setPhase2StartTime(e.target.value);
+                                }}
+                                style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                              />
+                            </div>
+                            <div className="time-input-field" style={{ margin: 0 }}>
+                              <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569' }}>END TIME</label>
+                              <input
+                                type="time"
+                                value={slot.phase2EndTime || phase2EndTime || '07:30'}
+                                onChange={e => {
+                                  handleSlotTimeChange(slot.id, 'phase2EndTime', e.target.value);
+                                  if (index === 0) setPhase2EndTime(e.target.value);
+                                }}
+                                style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="time-input-field" style={{ margin: 0 }}>
+                            <label style={{ fontSize: '10px', fontWeight: 800, color: '#475569' }}>LATE CUTOFF (OPTIONAL)</label>
+                            <input
+                              type="time"
+                              value={slot.phase2LateTime !== undefined && slot.phase2LateTime !== null ? slot.phase2LateTime : (phase2LateTime || '')}
+                              onChange={e => {
+                                handleSlotTimeChange(slot.id, 'phase2LateTime', e.target.value || null);
+                                if (index === 0) setPhase2LateTime(e.target.value || null);
+                              }}
+                              style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                            />
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', alignItems: 'flex-end' }}>
+                        <div className="time-input-field" style={{ margin: 0 }}>
+                          <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>START TIME</label>
+                          <input
+                            type="time"
+                            value={slot.startTime}
+                            onChange={e => handleSlotTimeChange(slot.id, 'startTime', e.target.value)}
+                            style={{ width: '100%', height: '42px', borderRadius: '8px' }}
+                          />
+                        </div>
+
+                        <div className="time-input-field" style={{ margin: 0 }}>
+                          <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>END TIME</label>
+                          <input
+                            type="time"
+                            value={slot.endTime}
+                            onChange={e => handleSlotTimeChange(slot.id, 'endTime', e.target.value)}
+                            style={{ width: '100%', height: '42px', borderRadius: '8px' }}
+                          />
+                        </div>
+
+                        <div className="time-input-field" style={{ margin: 0 }}>
+                          <label style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>LATE CUTOFF (OPTIONAL)</label>
+                          <input
+                            type="time"
+                            value={slot.lateTime || ''}
+                            onChange={e => handleSlotTimeChange(slot.id, 'lateTime', e.target.value || null)}
+                            style={{ width: '100%', height: '42px', borderRadius: '8px' }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
