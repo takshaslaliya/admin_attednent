@@ -22,6 +22,7 @@ import {
   ClipboardList,
   Vote,
   RotateCcw,
+  Layers,
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -112,7 +113,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const isSecurityActive = isStrings || isSecurity;
 
   const isAddSession = pathname === '/session_add' || pathname === '/add_session';
-  const isSessionsActive = pathname.startsWith('/session/') || isAddSession;
+  const isSessionsActive = pathname.startsWith('/session/') || isAddSession || pathname === '/sessions' || pathname === '/session-management';
 
   // Category collapsible state (only open active category by default)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -422,6 +423,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
               {openSections.sessions && (
                 <div className="nav-submenu">
+                  {!isLeader && (
+                    <button
+                      className={`nav-subitem-btn ${pathname === '/sessions' ? 'active' : ''}`}
+                      onClick={() => handleNavClick('/sessions')}
+                      style={{ color: '#4f46e5', fontWeight: 700 }}
+                    >
+                      <span className="subitem-bullet" style={{ backgroundColor: '#4f46e5' }}></span>
+                      <Layers size={15} className="subitem-icon" />
+                      <span>Manage All Sessions</span>
+                    </button>
+                  )}
+
                   {visibleSessions.map((s) => (
                     <button
                       key={`sess_nav_${s.session_key}`}

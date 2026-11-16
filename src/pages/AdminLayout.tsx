@@ -11,6 +11,7 @@ import { LeadersManagementView } from './views/LeadersManagementView';
 import { WhatsAppMessagingView } from './views/WhatsAppMessagingView';
 import { LiveAttendanceManager } from './views/LiveAttendanceManager';
 import { CreateSessionView } from './views/CreateSessionView';
+import { SessionsManagementView } from './views/SessionsManagementView';
 import { DeviceSecurityView } from './views/DeviceSecurityView';
 import { LeavesManagementView } from './views/LeavesManagementView';
 import { FloorStringsView } from './views/FloorStringsView';
@@ -107,6 +108,9 @@ export const AdminLayout: React.FC = () => {
     if (p === '/session_add' || p === '/add_session') {
       return { title: 'Create Session', subtitle: 'Add a new dynamic attendance schedule' };
     }
+    if (p === '/sessions' || p === '/session-management' || p === '/manage-sessions') {
+      return { title: 'Attendance Session Management', subtitle: 'Configure sessions, enable two-phase attendance, and manage timings' };
+    }
     if (p.startsWith('/session/')) {
       const key = p.replace('/session/', '');
       const s = sessions.find(item => item.session_key === key);
@@ -157,6 +161,9 @@ export const AdminLayout: React.FC = () => {
             <Route path="/data-recovery" element={!isLeader ? <RecycleBinView /> : <Navigate to="/" replace />} />
             <Route path="/leaves" element={<LeavesManagementView />} />
             <Route path="/security" element={<DeviceSecurityView />} />
+            <Route path="/sessions" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
+            <Route path="/session-management" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
+            <Route path="/manage-sessions" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
             <Route path="/session_add" element={!isLeader ? <CreateSessionView onAdded={() => { fetchSessions(); navigate('/'); }} /> : <Navigate to="/" replace />} />
             <Route path="/add_session" element={!isLeader ? <CreateSessionView onAdded={() => { fetchSessions(); navigate('/'); }} /> : <Navigate to="/" replace />} />
             <Route path="/session/:sessionKey" element={<SessionViewWrapper onSessionDeleted={() => { fetchSessions(); navigate('/'); }} />} />

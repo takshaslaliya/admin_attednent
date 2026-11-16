@@ -34,6 +34,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useConfirm, useCustomDialog } from '../../context/ConfirmContext';
 import { HamsCard } from '../../components/HamsCard';
 import { ExpandableReasonTooltip } from '../../components/ExpandableReasonTooltip';
+import { EditSessionModal } from '../../components/EditSessionModal';
 import './LiveAttendanceManager.css';
 
 interface ManualModalState {
@@ -163,6 +164,8 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   const [phase2StartTime, setPhase2StartTime] = useState('07:25');
   const [phase2EndTime, setPhase2EndTime] = useState('07:30');
   const [phase2LateTime, setPhase2LateTime] = useState<string | null>(null);
+  const [iconName, setIconName] = useState('moon');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const [linkedSessionKey, setLinkedSessionKey] = useState<string | null>(null);
   const [availableSessions, setAvailableSessions] = useState<any[]>([]);
@@ -289,7 +292,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   const [twoPhaseSummary, setTwoPhaseSummary] = useState<any>(null);
   const [twoPhaseWindows, setTwoPhaseWindows] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'combined' | 'first' | 'second'>('combined');
-  const [studentDetailsModal, setStudentDetailsModal] = useState<any | null>(null);
+  const [selectedStudentDetails, setSelectedStudentDetails] = useState<any | null>(null);
 
   useEffect(() => {
     fetchSchedule(false);
@@ -373,6 +376,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         const match = allRes.data.data.find((s: any) => s.session_key === sessionKey);
         if (match) {
           setSessionName(match.session_name);
+          if (match.icon_name) {
+            setIconName(match.icon_name);
+          }
           if (match.is_for_all_students !== undefined) {
             setIsForAllStudents(Boolean(match.is_for_all_students));
           }
@@ -1103,8 +1109,12 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         </div>
         {!isLeader && (
           <div className="header-action-group">
-            <button className="header-action-btn edit" onClick={editSession} title="Rename Session">
-              <Edit2 size={15} /> Edit Name
+            <button
+              className="header-action-btn edit"
+              onClick={() => setIsEditModalOpen(true)}
+              title="Edit Session Settings & Multiple-Time Attendance"
+            >
+              <Edit2 size={15} /> Edit Session
             </button>
             <button className="header-action-btn delete" onClick={deleteSession} title="Delete Session">
               <Trash2 size={15} /> Delete Session
@@ -1112,6 +1122,40 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
           </div>
         )}
       </div>
+
+      {/* Edit Session Modal */}
+      {isEditModalOpen && (
+        <EditSessionModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          session={{
+            session_key: sessionKey,
+            session_name: sessionName,
+            icon_name: iconName || 'moon',
+            is_for_all_students: isForAllStudents,
+            has_multiple_attendance: isMultipleAttendance,
+            start_time: startTime,
+            end_time: endTime,
+            late_time: lateTime,
+            phase2_start_time: phase2StartTime,
+            phase2_end_time: phase2EndTime,
+            phase2_late_time: phase2LateTime
+          }}
+          onSessionUpdated={(updated) => {
+            if (updated.session_name) setSessionName(updated.session_name);
+            if (updated.icon_name) setIconName(updated.icon_name);
+            if (updated.is_for_all_students !== undefined) setIsForAllStudents(Boolean(updated.is_for_all_students));
+            if (updated.has_multiple_attendance !== undefined) setIsMultipleAttendance(Boolean(updated.has_multiple_attendance));
+            if (updated.start_time) setStartTime(updated.start_time.slice(0, 5));
+            if (updated.end_time) setEndTime(updated.end_time.slice(0, 5));
+            if (updated.late_time !== undefined) setLateTime(updated.late_time ? updated.late_time.slice(0, 5) : null);
+            if (updated.phase2_start_time) setPhase2StartTime(updated.phase2_start_time.slice(0, 5));
+            if (updated.phase2_end_time) setPhase2EndTime(updated.phase2_end_time.slice(0, 5));
+            if (updated.phase2_late_time !== undefined) setPhase2LateTime(updated.phase2_late_time ? updated.phase2_late_time.slice(0, 5) : null);
+            fetchSchedule(true);
+          }}
+        />
+      )}
 
 
       {/* Tabs (Hidden for Floor Leaders - Leaders only see View Attendance) */}
@@ -2655,7 +2699,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                           {isMultipleAttendance && (
                             <button
                               type="button"
-                              onClick={() => setStudentDetailsModal(s)}
+                              onClick={() => setSelectedStudentDetails(s)}
                               title="View Student Attendance Details"
                               style={{
                                 padding: '6px 10px',
