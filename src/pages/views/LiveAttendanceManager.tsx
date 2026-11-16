@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Play, 
-  Square, 
-  Download, 
-  CheckCircle2, 
-  Clock, 
-  XCircle, 
-  Info, 
-  Edit2, 
+import {
+  Play,
+  Square,
+  Download,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Info,
+  Edit2,
   Trash2,
   ArrowRight,
   Search,
@@ -23,7 +23,11 @@ import {
   Phone,
   Plus,
   Calendar,
-  Sparkles
+  Sparkles,
+  Eye,
+  Printer,
+  Layers,
+  ShieldCheck
 } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -36,6 +40,7 @@ interface ManualModalState {
   isOpen: boolean;
   student: any;
   status: 'Present' | 'Late';
+  phase?: 1 | 2;
   description: string;
 }
 
@@ -141,7 +146,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   const isLeader = (admin?.role || '').toUpperCase() === 'LEADER' || (admin?.role || '').toLowerCase() === 'floor_leader';
   let permissions: any = admin?.session_permissions || {};
   if (typeof permissions === 'string') {
-    try { permissions = JSON.parse(permissions); } catch(e) { permissions = {}; }
+    try { permissions = JSON.parse(permissions); } catch (e) { permissions = {}; }
   }
   const sKey = (sessionKey || '').toLowerCase();
   const sessionPerm = permissions?.[sKey] || permissions?.[sessionKey] || permissions?.['all'] || 'edit';
@@ -152,6 +157,13 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   const [startTime, setStartTime] = useState('21:00');
   const [endTime, setEndTime] = useState('21:30');
   const [lateTime, setLateTime] = useState<string | null>(null);
+
+  // Multiple-Time Attendance (Two-Phase Attendance)
+  const [hasMultipleAttendance, setHasMultipleAttendance] = useState(false);
+  const [phase2StartTime, setPhase2StartTime] = useState('07:25');
+  const [phase2EndTime, setPhase2EndTime] = useState('07:30');
+  const [phase2LateTime, setPhase2LateTime] = useState<string | null>(null);
+
   const [linkedSessionKey, setLinkedSessionKey] = useState<string | null>(null);
   const [availableSessions, setAvailableSessions] = useState<any[]>([]);
 
@@ -179,7 +191,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   const handleAddDaySchedule = () => {
     const assigned = getAssignedDays();
     const unassignedDays = ALL_WEEK_DAYS.filter(d => !assigned.has(d));
-    
+
     if (unassignedDays.length === 0) {
       alert('All 7 days already have schedule rules.');
       return;
@@ -272,6 +284,13 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   const [manualModal, setManualModal] = useState<ManualModalState | null>(null);
   const [justifyModal, setJustifyModal] = useState<JustifyModalState | null>(null);
 
+  // Two-Phase / Multiple Attendance Report State
+  const [isMultipleAttendance, setIsMultipleAttendance] = useState(false);
+  const [twoPhaseSummary, setTwoPhaseSummary] = useState<any>(null);
+  const [twoPhaseWindows, setTwoPhaseWindows] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<'combined' | 'first' | 'second'>('combined');
+  const [studentDetailsModal, setStudentDetailsModal] = useState<any | null>(null);
+
   useEffect(() => {
     fetchSchedule(false);
     fetchTargets();
@@ -310,6 +329,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         setStartTime((d.start_time || '21:00').slice(0, 5));
         setEndTime((d.end_time || '21:30').slice(0, 5));
         setLateTime(d.late_time ? d.late_time.slice(0, 5) : null);
+        setHasMultipleAttendance(Boolean(d.has_multiple_attendance));
+        if (d.phase2_start_time) setPhase2StartTime(d.phase2_start_time.slice(0, 5));
+        if (d.phase2_end_time) setPhase2EndTime(d.phase2_end_time.slice(0, 5));
+        setPhase2LateTime(d.phase2_late_time ? d.phase2_late_time.slice(0, 5) : null);
         setLinkedSessionKey(d.linked_session_key || null);
         const sMsg = d.auto_message_student || d.auto_message || '';
         const pMsg = d.auto_message_parent || '';
@@ -381,7 +404,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   };
 
   const toggleStudentTarget = (studentId: number) => {
-    setSelectedTargetIds(prev => 
+    setSelectedTargetIds(prev =>
       prev.includes(studentId)
         ? prev.filter(id => id !== studentId)
         : [...prev, studentId]
@@ -452,9 +475,43 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     const eTime = primarySlot ? primarySlot.endTime : endTime;
     const lTime = primarySlot ? primarySlot.lateTime : lateTime;
 
+    // Validate Multiple Attendance Windows (Two-Phase)
+    if (hasMultipleAttendance) {
+      if (!phase2StartTime || !phase2EndTime) {
+        alert('Please specify both Start Time and End Time for the Second Attendance Window.');
+        return;
+      }
+      const [sh1, sm1] = sTime.split(':').map(Number);
+      const [eh1, em1] = eTime.split(':').map(Number);
+      const [sh2, sm2] = phase2StartTime.split(':').map(Number);
+      const [eh2, em2] = phase2EndTime.split(':').map(Number);
+      const w1Start = sh1 * 60 + sm1;
+      const w1End = eh1 * 60 + em1;
+      const w2Start = sh2 * 60 + sm2;
+      const w2End = eh2 * 60 + em2;
+
+      if (w2Start < w1End) {
+        alert(`Validation Error: Second Attendance Window Start Time (${phase2StartTime}) must start AFTER First Attendance Window End Time (${eTime})!`);
+        return;
+      }
+      if (w2End <= w2Start) {
+        alert(`Validation Error: Second Attendance Window End Time (${phase2EndTime}) must be AFTER its Start Time (${phase2StartTime})!`);
+        return;
+      }
+      if (phase2LateTime) {
+        const [lh2, lm2] = phase2LateTime.split(':').map(Number);
+        const late2 = lh2 * 60 + lm2;
+        if (late2 < w2Start || late2 > w2End) {
+          alert('Second Attendance Window Late Cutoff must fall between Window 2 Start and End time.');
+          return;
+        }
+      }
+    }
+
     // Validate that autoMessageTime is after endTime
     if (autoMessageTime && autoMessageTime.trim()) {
-      const [eh, em] = eTime.split(':').map(Number);
+      const effectiveEndTime = (hasMultipleAttendance && phase2EndTime) ? phase2EndTime : eTime;
+      const [eh, em] = effectiveEndTime.split(':').map(Number);
       const [mh, mm] = autoMessageTime.split(':').map(Number);
       const [sh, sm] = sTime.split(':').map(Number);
       const eMins = eh * 60 + em;
@@ -462,7 +519,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
       const sMins = sh * 60 + sm;
 
       if (sMins <= eMins && mMins <= eMins) {
-        alert(`Automated WhatsApp message time (${autoMessageTime}) must be set AFTER attendance End Time (${eTime})!`);
+        alert(`Automated WhatsApp message time (${autoMessageTime}) must be set AFTER attendance End Time (${effectiveEndTime})!`);
         return;
       }
     }
@@ -474,6 +531,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         startTime: sTime,
         endTime: eTime,
         lateTime: lTime,
+        hasMultipleAttendance: hasMultipleAttendance,
+        phase2StartTime: hasMultipleAttendance ? phase2StartTime : null,
+        phase2EndTime: hasMultipleAttendance ? phase2EndTime : null,
+        phase2LateTime: hasMultipleAttendance ? phase2LateTime : null,
         daySchedules: daySchedules,
         linkedSessionKey: linkedSessionKey,
         autoMessage: alertsConfig.absent.student_message,
@@ -641,6 +702,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     try {
       const res = await apiClient.get(`/attendance/session/${sessionKey}/students?date=${attendanceDate}`);
       if (res.data.success) {
+        setIsMultipleAttendance(Boolean(res.data.multiple_attendance));
+        setTwoPhaseSummary(res.data.summary || null);
+        setTwoPhaseWindows(res.data.windows || null);
         const rawList = res.data.data || [];
         const seen = new Set();
         const uniqueList = rawList.filter((s: any) => {
@@ -676,13 +740,15 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   };
 
   // Open Manual Mark Modal
-  const openManualModal = (student: any) => {
-    const currentStatus = student.status === 'Late' ? 'Late' : 'Present';
+  const openManualModal = (student: any, defaultPhase: 1 | 2 = 1) => {
+    const isLate = defaultPhase === 2 ? student.phase2_is_late : (student.phase1_is_late || student.status === 'Late');
+    const currentStatus = isLate ? 'Late' : 'Present';
     setManualModal({
       isOpen: true,
       student: student,
       status: currentStatus,
-      description: student.remarks || ''
+      phase: defaultPhase,
+      description: (defaultPhase === 2 ? student.phase2_remarks : student.phase1_remarks) || student.remarks || ''
     });
   };
 
@@ -691,6 +757,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     if (!manualModal?.student) return;
     setSubmittingAction(true);
     try {
+      const targetPhase = manualModal.phase || 1;
       const res = await apiClient.post('/attendance/mark-manual', {
         session_key: sessionKey,
         student_code: manualModal.student.student_code,
@@ -698,6 +765,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         date: attendanceDate,
         status: manualModal.status,
         is_late: manualModal.status === 'Late',
+        phase: targetPhase,
         description: manualModal.description.trim()
       });
 
@@ -716,11 +784,11 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   };
 
   // Delete / Remove Single Student Attendance Record
-  const handleDeleteSingleStudent = async (student: any) => {
+  const handleDeleteSingleStudent = async (student: any, phase?: 1 | 2) => {
     if (!student) return;
     const isConfirmed = await confirm({
       title: 'Remove Student Attendance',
-      message: `Are you sure you want to remove attendance for "${student.name || student.student_code}" in "${sessionName || sessionKey}" on ${attendanceDate}?`,
+      message: `Are you sure you want to remove ${phase ? `Phase ${phase}` : ''} attendance for "${student.name || student.student_code}" in "${sessionName || sessionKey}" on ${attendanceDate}?`,
       warningNote: 'This student will revert to Absent status for this session.',
       confirmText: 'Yes, Remove Record',
       type: 'danger',
@@ -732,8 +800,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     try {
       const stuCode = student.student_code || '';
       const stuId = student.student_id || student.id || '';
+      const phaseParam = phase ? `&phase=${phase}` : '';
       const res = await apiClient.delete(
-        `/attendance/session/${sessionKey}/records?date=${attendanceDate}&student_code=${encodeURIComponent(stuCode)}&student_id=${encodeURIComponent(stuId)}`
+        `/attendance/session/${sessionKey}/records?date=${attendanceDate}&student_code=${encodeURIComponent(stuCode)}&student_id=${encodeURIComponent(stuId)}${phaseParam}`
       );
       if (res.data.success) {
         setManualModal(null);
@@ -747,6 +816,69 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     } finally {
       setSubmittingAction(false);
     }
+  };
+
+  const handleExportClientCSV = () => {
+    const headers = [
+      'Student Code',
+      'Student Name',
+      'Floor',
+      'Room',
+      'Contact Phone',
+      ...(isMultipleAttendance
+        ? [
+          '1st Window Time',
+          '1st Window Status',
+          '2nd Window Time',
+          '2nd Window Status',
+          'Overall Status'
+        ]
+        : ['Status', 'Time Marked (IST)']),
+      'Notes / Remarks'
+    ];
+
+    const rows = filteredAttendance.map(s => {
+      if (isMultipleAttendance) {
+        return [
+          s.student_code || '',
+          `"${(s.name || '').replace(/"/g, '""')}"`,
+          s.floor_id ?? '',
+          s.room_number ?? '',
+          s.phone_number || '',
+          formatISTTime(s.phase1_marked_at),
+          s.phase1_status || 'Absent',
+          formatISTTime(s.phase2_marked_at),
+          s.phase2_status || 'Absent',
+          s.overall_status || 'Absent',
+          `"${(s.remarks || s.reason || '').replace(/"/g, '""')}"`
+        ];
+      } else {
+        const studentStatus = s.status || (Boolean(s.is_present && s.is_present !== 0 && s.is_present !== '0') ? (Boolean(s.is_late && s.is_late !== 0 && s.is_late !== '0') ? 'Late' : 'Present') : 'Absent');
+        return [
+          s.student_code || '',
+          `"${(s.name || '').replace(/"/g, '""')}"`,
+          s.floor_id ?? '',
+          s.room_number ?? '',
+          s.phone_number || '',
+          studentStatus,
+          formatISTTime(s.marked_at),
+          `"${(s.remarks || s.reason || '').replace(/"/g, '""')}"`
+        ];
+      }
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${sessionKey}_attendance_${attendanceDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintReport = () => {
+    window.print();
   };
 
   // Open Justify Modal
@@ -812,25 +944,86 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     const sMins = sh * 60 + sm;
     const eMins = eh * 60 + em;
 
-    if (sMins === eMins) return false;
-    if (eMins < sMins) {
-      return curMins >= sMins || curMins <= eMins;
+    const inWin1 = (eMins < sMins) ? (curMins >= sMins || curMins <= eMins) : (sMins !== eMins && curMins >= sMins && curMins <= eMins);
+
+    if (hasMultipleAttendance && phase2StartTime && phase2EndTime) {
+      const [sh2, sm2] = phase2StartTime.split(':').map(Number);
+      const [eh2, em2] = phase2EndTime.split(':').map(Number);
+      const s2Mins = sh2 * 60 + sm2;
+      const e2Mins = eh2 * 60 + em2;
+      const inWin2 = (e2Mins < s2Mins) ? (curMins >= s2Mins || curMins <= e2Mins) : (s2Mins !== e2Mins && curMins >= s2Mins && curMins <= e2Mins);
+      return inWin1 || inWin2;
     }
-    return curMins >= sMins && curMins <= eMins;
+
+    return inWin1;
+  };
+
+  const getActivePhaseLabel = () => {
+    const now = new Date();
+    const curMins = now.getHours() * 60 + now.getMinutes();
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    const inWin1 = curMins >= (sh * 60 + sm) && curMins <= (eh * 60 + em);
+    if (inWin1) return 'Window 1 Active';
+    if (hasMultipleAttendance && phase2StartTime && phase2EndTime) {
+      const [sh2, sm2] = phase2StartTime.split(':').map(Number);
+      const [eh2, em2] = phase2EndTime.split(':').map(Number);
+      const inWin2 = curMins >= (sh2 * 60 + sm2) && curMins <= (eh2 * 60 + em2);
+      if (inWin2) return 'Window 2 Active';
+    }
+    return isOpen ? 'OPEN' : 'CLOSED';
   };
 
   const isOpen = isWindowActive();
 
   // Filter attendance students
   const filteredAttendance = attendanceStudents.filter(s => {
-    const studentStatus = s.status || (Boolean(s.is_present && s.is_present !== 0 && s.is_present !== '0') ? (Boolean(s.is_late && s.is_late !== 0 && s.is_late !== '0') ? 'Late' : 'Present') : 'Absent');
     const matchesFloor = floorFilter === 'All' || String(s.floor_id) === String(floorFilter);
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q ||
+      String(s.student_code || '').toLowerCase().includes(q) ||
+      String(s.name || '').toLowerCase().includes(q) ||
+      String(s.room_number || '').toLowerCase().includes(q) ||
+      String(s.phone_number || '').toLowerCase().includes(q);
+
+    if (!matchesFloor || !matchesSearch) return false;
+
+    if (isMultipleAttendance) {
+      if (statusFilter === 'All') return true;
+      const overall = (s.overall_status || s.status || 'Absent').toLowerCase();
+      const p1 = (s.phase1_status || 'Absent').toLowerCase();
+      const p2 = (s.phase2_status || 'Absent').toLowerCase();
+      const fStatus = statusFilter.toLowerCase();
+
+      if (fStatus === 'complete') return overall === 'complete';
+      if (fStatus === 'incomplete') return overall === 'incomplete';
+      if (fStatus === 'present') {
+        if (viewMode === 'first') return p1 === 'present';
+        if (viewMode === 'second') return p2 === 'present';
+        return overall === 'complete' || p1 === 'present' || p2 === 'present';
+      }
+      if (fStatus === 'late') {
+        if (viewMode === 'first') return p1 === 'late';
+        if (viewMode === 'second') return p2 === 'late';
+        return Boolean(s.phase1_is_late || s.phase2_is_late || p1 === 'late' || p2 === 'late');
+      }
+      if (fStatus === 'absent') {
+        if (viewMode === 'first') return p1 === 'absent';
+        if (viewMode === 'second') return p2 === 'absent';
+        return overall === 'absent';
+      }
+      if (fStatus === 'not eligible' || fStatus === 'not_eligible') {
+        return p2 === 'not eligible' || !s.phase2_is_eligible;
+      }
+      if (fStatus === 'leave') {
+        return overall === 'leave' || p1 === 'leave' || p2 === 'leave';
+      }
+      return true;
+    }
+
+    const studentStatus = s.status || (Boolean(s.is_present && s.is_present !== 0 && s.is_present !== '0') ? (Boolean(s.is_late && s.is_late !== 0 && s.is_late !== '0') ? 'Late' : 'Present') : 'Absent');
     const matchesStatus = statusFilter === 'All' || studentStatus.toLowerCase() === statusFilter.toLowerCase();
-    const matchesSearch = !searchQuery || 
-      String(s.student_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(s.room_number || '').toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFloor && matchesStatus && matchesSearch;
+    return matchesStatus;
   });
 
   // Filter absent students
@@ -840,7 +1033,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
     const matchesStatus = absentStatusFilter === 'All' ||
       (absentStatusFilter === 'Justified' && isJustified) ||
       (absentStatusFilter === 'Unjustified' && !isJustified);
-    const matchesSearch = !absentSearchQuery || 
+    const matchesSearch = !absentSearchQuery ||
       String(s.student_code || '').toLowerCase().includes(absentSearchQuery.toLowerCase()) ||
       String(s.name || '').toLowerCase().includes(absentSearchQuery.toLowerCase()) ||
       String(s.room_number || '').toLowerCase().includes(absentSearchQuery.toLowerCase());
@@ -850,7 +1043,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
   // Filter target assignment students
   const filteredTargetStudents = targetStudents.filter(s => {
     const matchesFloor = targetFloorFilter === 'All' || String(s.floor_id) === String(targetFloorFilter);
-    const matchesSearch = !targetSearchQuery || 
+    const matchesSearch = !targetSearchQuery ||
       String(s.student_code || '').toLowerCase().includes(targetSearchQuery.toLowerCase()) ||
       String(s.name || '').toLowerCase().includes(targetSearchQuery.toLowerCase()) ||
       String(s.room_number || '').toLowerCase().includes(targetSearchQuery.toLowerCase());
@@ -974,9 +1167,177 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               {isOpen ? <CheckCircle2 size={24} /> : <XCircle size={24} />}
             </div>
             <div>
-              <h3>Attendance is {isOpen ? 'OPEN' : 'CLOSED'}</h3>
-              {isOpen && <p>Live Time Window: {format12Hour(startTime)} – {format12Hour(endTime)}</p>}
+              <h3>Attendance is {isOpen ? 'OPEN' : 'CLOSED'} {hasMultipleAttendance ? `(${getActivePhaseLabel()})` : ''}</h3>
+              {hasMultipleAttendance ? (
+                <p>
+                  1st Window: <strong>{format12Hour(startTime)} – {format12Hour(endTime)}</strong> &nbsp;•&nbsp;
+                  2nd Window: <strong>{format12Hour(phase2StartTime)} – {format12Hour(phase2EndTime)}</strong>
+                </p>
+              ) : (
+                isOpen && <p>Live Time Window: {format12Hour(startTime)} – {format12Hour(endTime)}</p>
+              )}
             </div>
+          </div>
+
+          {/* MULTIPLE-TIME ATTENDANCE (TWO-PHASE) CONFIGURATION CARD */}
+          <div style={{
+            backgroundColor: hasMultipleAttendance ? '#f5f3ff' : '#ffffff',
+            border: hasMultipleAttendance ? '2px solid #8b5cf6' : '1px solid #e2e8f0',
+            borderRadius: '16px',
+            padding: '22px 24px',
+            boxShadow: hasMultipleAttendance ? '0 4px 16px rgba(139, 92, 246, 0.12)' : '0 2px 6px rgba(0,0,0,0.02)',
+            transition: 'all 0.2s ease'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '12px',
+                  backgroundColor: hasMultipleAttendance ? '#7c3aed' : '#f1f5f9',
+                  color: hasMultipleAttendance ? '#ffffff' : '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: hasMultipleAttendance ? '0 4px 10px rgba(124, 58, 237, 0.3)' : 'none'
+                }}>
+                  <Layers size={22} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                      Enable Multiple-Time Attendance (Two-Phase Attendance)
+                    </h4>
+                    {hasMultipleAttendance && (
+                      <span style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '11px', fontWeight: 800, padding: '2px 8px', borderRadius: '10px' }}>
+                        TWO-PHASE ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
+                    Configure two separate attendance windows for this session (e.g. Aarti 1st: 6:45–7:00 AM, 2nd: 7:25–7:30 AM). Only students who mark 1st attendance can mark 2nd attendance.
+                  </p>
+                </div>
+              </div>
+
+              <label style={{ display: 'inline-flex', alignItems: 'center', cursor: isViewOnly ? 'not-allowed' : 'pointer', gap: '10px' }}>
+                <input
+                  type="checkbox"
+                  disabled={isViewOnly}
+                  checked={hasMultipleAttendance}
+                  onChange={e => setHasMultipleAttendance(e.target.checked)}
+                  style={{ width: '22px', height: '22px', accentColor: '#7c3aed', cursor: isViewOnly ? 'not-allowed' : 'pointer' }}
+                />
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                  {hasMultipleAttendance ? 'Enabled for this session' : 'Disabled (Single Attendance)'}
+                </span>
+              </label>
+            </div>
+
+            {/* When multiple attendance is enabled, show the two windows configuration */}
+            {hasMultipleAttendance && (
+              <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #ddd6fe' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                  {/* Card 1: First Attendance Window */}
+                  <div style={{ backgroundColor: '#ffffff', border: '1.5px solid #818cf8', borderRadius: '14px', padding: '18px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <span style={{ backgroundColor: '#4f46e5', color: '#ffffff', fontSize: '12px', fontWeight: 800, padding: '3px 10px', borderRadius: '6px' }}>
+                        1️⃣ First Attendance Window
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Initial Check-in</span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      <div className="time-input-field">
+                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>START TIME</label>
+                        <input
+                          type="time"
+                          value={startTime}
+                          onChange={e => {
+                            setStartTime(e.target.value);
+                            if (daySchedules.length > 0) handleSlotTimeChange(daySchedules[0].id, 'startTime', e.target.value);
+                          }}
+                          style={{ height: '42px', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div className="time-input-field">
+                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>END TIME</label>
+                        <input
+                          type="time"
+                          value={endTime}
+                          onChange={e => {
+                            setEndTime(e.target.value);
+                            if (daySchedules.length > 0) handleSlotTimeChange(daySchedules[0].id, 'endTime', e.target.value);
+                          }}
+                          style={{ height: '42px', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="time-input-field">
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>LATE CUTOFF (OPTIONAL)</label>
+                      <input
+                        type="time"
+                        value={lateTime || ''}
+                        onChange={e => {
+                          setLateTime(e.target.value || null);
+                          if (daySchedules.length > 0) handleSlotTimeChange(daySchedules[0].id, 'lateTime', e.target.value || null);
+                        }}
+                        style={{ height: '42px', borderRadius: '8px' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Card 2: Second Attendance Window */}
+                  <div style={{ backgroundColor: '#ffffff', border: '1.5px solid #c084fc', borderRadius: '14px', padding: '18px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                      <span style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '12px', fontWeight: 800, padding: '3px 10px', borderRadius: '6px' }}>
+                        2️⃣ Second Attendance Window
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Second Check-in</span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      <div className="time-input-field">
+                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>START TIME</label>
+                        <input
+                          type="time"
+                          value={phase2StartTime}
+                          onChange={e => setPhase2StartTime(e.target.value)}
+                          style={{ height: '42px', borderRadius: '8px' }}
+                        />
+                      </div>
+                      <div className="time-input-field">
+                        <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>END TIME</label>
+                        <input
+                          type="time"
+                          value={phase2EndTime}
+                          onChange={e => setPhase2EndTime(e.target.value)}
+                          style={{ height: '42px', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="time-input-field">
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>LATE CUTOFF (OPTIONAL)</label>
+                      <input
+                        type="time"
+                        value={phase2LateTime || ''}
+                        onChange={e => setPhase2LateTime(e.target.value || null)}
+                        style={{ height: '42px', borderRadius: '8px' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '14px', padding: '12px 16px', borderRadius: '10px', backgroundColor: '#ffffff', border: '1px solid #ddd6fe', fontSize: '12px', color: '#6d28d9', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <ShieldCheck size={18} color="#7c3aed" />
+                  <span>
+                    <strong>Strict Eligibility Rule:</strong> Window 2 must start after Window 1 ends. Students who miss the First Attendance Window are marked <strong>"Not Eligible"</strong> and strictly blocked by backend security from marking the Second Attendance Window.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="time-window-card">
@@ -999,8 +1360,8 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               {daySchedules.map((slot, index) => {
                 const otherAssignedDays = getAssignedDays(slot.id);
                 return (
-                  <div 
-                    key={slot.id} 
+                  <div
+                    key={slot.id}
                     style={{
                       backgroundColor: '#f8fafc',
                       border: '1.5px solid #e2e8f0',
@@ -1168,9 +1529,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             </div>
 
             <div className="timing-actions-row">
-              <button 
-                className="btn-start-timing" 
-                onClick={saveSchedule} 
+              <button
+                className="btn-start-timing"
+                onClick={saveSchedule}
                 disabled={saving || isViewOnly}
                 title={isViewOnly ? 'Disabled in View Only mode' : 'Start / Save Attendance'}
                 style={isViewOnly ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
@@ -1178,9 +1539,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                 <Play size={18} /> {saving ? 'Saving...' : 'Start / Save Attendance'}
               </button>
 
-              <button 
-                className="btn-stop-timing" 
-                onClick={stopAttendance} 
+              <button
+                className="btn-stop-timing"
+                onClick={stopAttendance}
                 disabled={saving || isViewOnly}
                 title={isViewOnly ? 'Disabled in View Only mode' : 'Stop immediately'}
                 style={isViewOnly ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
@@ -1212,12 +1573,12 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               </div>
 
               {autoMessageTime && (
-                <span style={{ 
-                  padding: '4px 12px', 
-                  borderRadius: '12px', 
-                  fontSize: '12px', 
-                  fontWeight: 700, 
-                  backgroundColor: '#ecfdf5', 
+                <span style={{
+                  padding: '4px 12px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  backgroundColor: '#ecfdf5',
                   color: '#065f46',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1246,15 +1607,15 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                   <button
                     type="button"
                     onClick={() => setAutoMessageTime('')}
-                    style={{ 
-                      background: 'none', 
-                      border: 'none', 
-                      color: '#ef4444', 
-                      cursor: 'pointer', 
-                      fontWeight: 700, 
-                      fontSize: '12px', 
-                      textAlign: 'left', 
-                      marginTop: '6px' 
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      textAlign: 'left',
+                      marginTop: '6px'
                     }}
                   >
                     ✕ Clear Time (Disable Auto-Send)
@@ -1458,7 +1819,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
 
                   {/* Two Message Boxes: Student and Parent */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-                    
+
                     {/* 1. Student Message Box */}
                     <div style={{
                       padding: '14px',
@@ -1485,8 +1846,8 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                         value={curCfg.student_message}
                         onChange={e => updateCategoryConfig(curCat, { student_message: e.target.value })}
                         placeholder={`e.g. Dear {name}, you were marked ${curInfo.label} for {session_name} on {date}.`}
-                        style={{ 
-                          width: '100%', 
+                        style={{
+                          width: '100%',
                           resize: 'vertical',
                           padding: '10px 12px',
                           borderRadius: '8px',
@@ -1549,8 +1910,8 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                         value={curCfg.parent_message}
                         onChange={e => updateCategoryConfig(curCat, { parent_message: e.target.value })}
                         placeholder={`e.g. Respected Parent, your ward {name} (Room {room}) was marked ${curInfo.label} for {session_name} attendance on {date} at AVD Hostel.`}
-                        style={{ 
-                          width: '100%', 
+                        style={{
+                          width: '100%',
                           resize: 'vertical',
                           padding: '10px 12px',
                           borderRadius: '8px',
@@ -1593,14 +1954,14 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             })()}
 
             {/* Bottom Controls */}
-            <div style={{ 
-              display: 'flex', 
-              flexWrap: 'wrap', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              gap: '12px', 
-              paddingTop: '16px', 
-              borderTop: '1px solid #f1f5f9' 
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              paddingTop: '16px',
+              borderTop: '1px solid #f1f5f9'
             }}>
               <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Info size={15} color="#3b82f6" /> Messages are sent with a 1–2 second human interval to protect WhatsApp account from being blocked.
@@ -1659,6 +2020,296 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
       {/* TAB 1: VIEW ATTENDANCE */}
       {activeTab === 1 && (
         <HamsCard padding="24px">
+          {/* TWO-PHASE ATTENDANCE SUMMARY CARDS (When Multiple-Time Attendance is Enabled) */}
+          {isMultipleAttendance && twoPhaseSummary && (
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '18px' }}>📊</span>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                    Two-Phase Daily Attendance Summary & Performance
+                  </h3>
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                  Date: <strong>{attendanceDate}</strong> • Mode: <strong>Multiple-Time Attendance</strong>
+                </div>
+              </div>
+
+              {/* KPI Cards Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                {/* 1. Total Assigned Students */}
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '14px',
+                  backgroundColor: '#f8fafc',
+                  border: '1.5px solid #e2e8f0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      TOTAL ASSIGNED
+                    </span>
+                    <Users size={16} color="#6366f1" />
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', margin: '4px 0' }}>
+                    {twoPhaseSummary.total_assigned || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>
+                    Active enrolled students
+                  </div>
+                </div>
+
+                {/* 2. First Attendance Window */}
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '14px',
+                  backgroundColor: '#eff6ff',
+                  border: '1.5px solid #bfdbfe',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      1ST ATTENDANCE
+                    </span>
+                    <span style={{ backgroundColor: '#2563eb', color: '#fff', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                      {twoPhaseSummary.first_attendance_percentage || 0}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#1e40af', margin: '4px 0' }}>
+                    {twoPhaseSummary.first_attendance_present || 0} <span style={{ fontSize: '13px', fontWeight: 600, color: '#60a5fa' }}>/ {twoPhaseSummary.total_assigned || 0}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#3b82f6', display: 'flex', gap: '8px' }}>
+                    <span>Absent: <strong>{twoPhaseSummary.first_attendance_absent || 0}</strong></span>
+                    <span>•</span>
+                    <span>Late: <strong>{twoPhaseSummary.first_attendance_late || 0}</strong></span>
+                  </div>
+                </div>
+
+                {/* 3. Second Attendance Window */}
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '14px',
+                  backgroundColor: '#f5f3ff',
+                  border: '1.5px solid #ddd6fe',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      2ND ATTENDANCE
+                    </span>
+                    <span style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                      {twoPhaseSummary.second_attendance_percentage || 0}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#5b21b6', margin: '4px 0' }}>
+                    {twoPhaseSummary.second_attendance_present || 0} <span style={{ fontSize: '13px', fontWeight: 600, color: '#a78bfa' }}>/ {twoPhaseSummary.total_assigned || 0}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#7c3aed', display: 'flex', gap: '8px' }}>
+                    <span>Absent: <strong>{twoPhaseSummary.second_attendance_absent || 0}</strong></span>
+                    <span>•</span>
+                    <span>Late: <strong>{twoPhaseSummary.second_attendance_late || 0}</strong></span>
+                  </div>
+                </div>
+
+                {/* 4. Complete (Both Present) */}
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '14px',
+                  backgroundColor: '#ecfdf5',
+                  border: '1.5px solid #a7f3d0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      BOTH COMPLETED
+                    </span>
+                    <CheckCircle2 size={16} color="#10b981" />
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#065f46', margin: '4px 0' }}>
+                    {twoPhaseSummary.both_present_count || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#059669' }}>
+                    Attended Window 1 & 2
+                  </div>
+                </div>
+
+                {/* 5. First Only (Incomplete) */}
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '14px',
+                  backgroundColor: '#fffbeb',
+                  border: '1.5px solid #fde68a',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      INCOMPLETE (1ST ONLY)
+                    </span>
+                    <Clock size={16} color="#f59e0b" />
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#92400e', margin: '4px 0' }}>
+                    {twoPhaseSummary.first_only_count || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#b45309' }}>
+                    Missed 2nd attendance
+                  </div>
+                </div>
+
+                {/* 6. Missed 1st (Not Eligible / Absent) */}
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '14px',
+                  backgroundColor: '#fef2f2',
+                  border: '1.5px solid #fecaca',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      MISSED 1ST ATTENDANCE
+                    </span>
+                    <XCircle size={16} color="#ef4444" />
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 800, color: '#991b1b', margin: '4px 0' }}>
+                    {twoPhaseSummary.missed_first_count || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#dc2626' }}>
+                    Not eligible for 2nd window
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TWO-PHASE VIEW MODE SWITCHER (COMBINED / 1ST / 2ND) */}
+          {isMultipleAttendance && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              padding: '10px 14px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              marginBottom: '18px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  VIEW MODE:
+                </span>
+                <div style={{ display: 'inline-flex', backgroundColor: '#e2e8f0', padding: '3px', borderRadius: '8px', gap: '2px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('combined')}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      backgroundColor: viewMode === 'combined' ? '#4f46e5' : 'transparent',
+                      color: viewMode === 'combined' ? '#ffffff' : '#475569',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    👥 Combined Attendance
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('first')}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      backgroundColor: viewMode === 'first' ? '#4f46e5' : 'transparent',
+                      color: viewMode === 'first' ? '#ffffff' : '#475569',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    1️⃣ First Attendance ({twoPhaseWindows?.first?.start_time ? format12Hour(twoPhaseWindows.first.start_time) : ''})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('second')}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      backgroundColor: viewMode === 'second' ? '#4f46e5' : 'transparent',
+                      color: viewMode === 'second' ? '#ffffff' : '#475569',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    2️⃣ Second Attendance ({twoPhaseWindows?.second?.start_time ? format12Hour(twoPhaseWindows.second.start_time) : ''})
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={handleExportClientCSV}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#334155',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Export complete 2-phase attendance report to CSV / Excel"
+                >
+                  <Download size={14} /> Export Table CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintReport}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#334155',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Print or Save as PDF"
+                >
+                  <Printer size={14} /> Print / PDF
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Filters */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
             <input
@@ -1675,41 +2326,57 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               ))}
             </select>
 
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: '130px' }}>
-              <option value="All">All Status</option>
-              <option value="Present">Present</option>
-              <option value="Late">Late</option>
-              <option value="Absent">Absent</option>
-              <option value="Leave">Leave</option>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: '160px' }}>
+              <option value="All">All Statuses</option>
+              {isMultipleAttendance ? (
+                <>
+                  <option value="Complete">Complete (Both Present)</option>
+                  <option value="Incomplete">Incomplete (1st Only)</option>
+                  <option value="Present">Present</option>
+                  <option value="Late">Late Arrivals</option>
+                  <option value="Absent">Absent</option>
+                  <option value="Not Eligible">Not Eligible (Missed 1st)</option>
+                  <option value="Leave">On Leave</option>
+                </>
+              ) : (
+                <>
+                  <option value="Present">Present</option>
+                  <option value="Late">Late</option>
+                  <option value="Absent">Absent</option>
+                  <option value="Leave">Leave</option>
+                </>
+              )}
             </select>
 
-            <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
               <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input
                 type="text"
-                placeholder="Search by ID, Name, or Room..."
+                placeholder="Search by ID, Name, Room, or Phone..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{ width: '100%', paddingLeft: '36px' }}
               />
             </div>
 
-            <button 
-              className="btn-export-csv" 
-              onClick={exportAttendanceCSV}
-              style={{ padding: '8px 14px', fontSize: '13px' }}
-            >
-              <Download size={14} /> Export CSV
-            </button>
+            {!isMultipleAttendance && (
+              <button
+                className="btn-export-csv"
+                onClick={handleExportClientCSV}
+                style={{ padding: '8px 14px', fontSize: '13px' }}
+              >
+                <Download size={14} /> Export CSV
+              </button>
+            )}
 
             {!isLeader && (
-              <button 
+              <button
                 type="button"
                 onClick={handleDeleteAllAttendance}
                 disabled={deletingAttendance}
                 title="Delete all attendance records for this session on this date"
-                style={{ 
-                  padding: '8px 14px', 
+                style={{
+                  padding: '8px 14px',
                   fontSize: '13px',
                   backgroundColor: '#ef4444',
                   color: '#ffffff',
@@ -1735,155 +2402,336 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             </span>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b' }}>
-                <th style={{ padding: '12px 14px' }}>Code</th>
-                <th style={{ padding: '12px 14px' }}>Name</th>
-                <th style={{ padding: '12px 14px' }}>Floor / Room</th>
-                <th style={{ padding: '12px 14px' }}>Status</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <Clock size={14} color="#64748b" /> Time (IST)
-                  </div>
-                </th>
-                <th style={{ padding: '12px 14px' }}>Notes / Remarks</th>
-                {!isViewOnly && (
-                  <th style={{ padding: '12px 14px', textAlign: 'right' }}>Action</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAttendance.map(s => (
-                <tr key={`att_${s.student_id || s.student_code}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '12px 14px', fontWeight: 700, color: '#3b82f6' }}>{s.student_code}</td>
-                  <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0f172a' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span>{s.name}</span>
-                      {s.tags && s.tags.length > 0 && s.tags.map((tag: any) => (
-                        <span
-                          key={tag.id || tag.tag_id}
-                          style={{
-                            padding: '2px 7px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            backgroundColor: `${tag.color || '#4f46e5'}20`,
-                            color: tag.color || '#4f46e5',
-                            border: `1px solid ${tag.color || '#4f46e5'}50`
-                          }}
-                        >
-                          🏷️ {tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 14px', color: '#64748b', fontSize: '13px' }}>
-                    Floor {s.floor_id} {s.room_number ? `(Rm ${s.room_number})` : ''}
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{
-                      padding: '4px 10px',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      backgroundColor: s.status === 'Present' ? '#ecfdf5' : (s.status === 'Late' ? '#fef3c7' : (s.status === 'Leave' ? '#ede9fe' : '#fef2f2')),
-                      color: s.status === 'Present' ? '#166534' : (s.status === 'Late' ? '#92400e' : (s.status === 'Leave' ? '#6d28d9' : '#991b1b')),
-                      border: s.status === 'Leave' ? '1px solid #ddd6fe' : undefined,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}>
-                      {s.status === 'Leave' ? '🏖️ Leave' : s.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                    {s.marked_at && (s.status === 'Present' || s.status === 'Late') ? (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: '#1e293b',
-                        backgroundColor: '#f8fafc',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid #e2e8f0'
-                      }}>
-                        <Clock size={12} color="#64748b" />
-                        {formatISTTime(s.marked_at)}
-                      </span>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b' }}>
+                  <th style={{ padding: '12px 14px' }}>Code</th>
+                  <th style={{ padding: '12px 14px' }}>Name</th>
+                  <th style={{ padding: '12px 14px' }}>Floor / Room</th>
+                  <th style={{ padding: '12px 14px' }}>Phone</th>
+
+                  {isMultipleAttendance ? (
+                    viewMode === 'combined' ? (
+                      <>
+                        <th style={{ padding: '12px 14px' }}>1st Attendance</th>
+                        <th style={{ padding: '12px 14px' }}>2nd Attendance</th>
+                        <th style={{ padding: '12px 14px' }}>Overall Status</th>
+                      </>
+                    ) : viewMode === 'first' ? (
+                      <>
+                        <th style={{ padding: '12px 14px' }}>1st Window Time</th>
+                        <th style={{ padding: '12px 14px' }}>1st Status</th>
+                      </>
                     ) : (
-                      <span style={{ color: '#94a3b8', fontSize: '13px' }}>—</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 14px', maxWidth: '240px' }}>
-                    <ExpandableReasonTooltip
-                      text={s.remarks || s.reason || ''}
-                      maxLength={38}
-                      color="#475569"
-                    />
-                  </td>
+                      <>
+                        <th style={{ padding: '12px 14px' }}>2nd Window Time</th>
+                        <th style={{ padding: '12px 14px' }}>2nd Status</th>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <th style={{ padding: '12px 14px' }}>Status</th>
+                      <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={14} color="#64748b" /> Time (IST)
+                        </div>
+                      </th>
+                    </>
+                  )}
+
+                  <th style={{ padding: '12px 14px' }}>Notes / Remarks</th>
                   {!isViewOnly && (
-                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button
-                          onClick={() => openManualModal(s)}
-                          style={{
-                            padding: '6px 14px',
-                            backgroundColor: s.status === 'Absent' ? '#e0e7ff' : '#f1f5f9',
-                            color: s.status === 'Absent' ? '#4338ca' : '#334155',
-                            border: '1px solid ' + (s.status === 'Absent' ? '#c7d2fe' : '#cbd5e1'),
-                            borderRadius: '8px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Action</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAttendance.map(s => (
+                  <tr key={`att_${s.student_id || s.student_code}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 700, color: '#3b82f6' }}>{s.student_code}</td>
+                    <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0f172a' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span>{s.name}</span>
+                        {s.tags && s.tags.length > 0 && s.tags.map((tag: any) => (
+                          <span
+                            key={tag.id || tag.tag_id}
+                            style={{
+                              padding: '2px 7px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              backgroundColor: `${tag.color || '#4f46e5'}20`,
+                              color: tag.color || '#4f46e5',
+                              border: `1px solid ${tag.color || '#4f46e5'}50`
+                            }}
+                          >
+                            🏷️ {tag.name}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 14px', color: '#64748b', fontSize: '13px' }}>
+                      Floor {s.floor_id} {s.room_number ? `(Rm ${s.room_number})` : ''}
+                    </td>
+                    <td style={{ padding: '12px 14px', color: '#64748b', fontSize: '13px', fontFamily: 'monospace' }}>
+                      {s.phone_number || '—'}
+                    </td>
+
+                    {/* TWO-PHASE ATTENDANCE COLUMNS */}
+                    {isMultipleAttendance ? (
+                      viewMode === 'combined' ? (
+                        <>
+                          {/* 1st Window */}
+                          <td style={{ padding: '12px 14px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{
+                                padding: '3px 8px',
+                                borderRadius: '8px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                width: 'fit-content',
+                                backgroundColor: s.phase1_status === 'Present' ? '#ecfdf5' : (s.phase1_status === 'Late' ? '#fef3c7' : (s.phase1_status === 'Leave' ? '#ede9fe' : '#fef2f2')),
+                                color: s.phase1_status === 'Present' ? '#166534' : (s.phase1_status === 'Late' ? '#92400e' : (s.phase1_status === 'Leave' ? '#6d28d9' : '#991b1b'))
+                              }}>
+                                {s.phase1_status === 'Leave' ? '🏖️ Leave' : s.phase1_status}
+                              </span>
+                              {s.phase1_marked_at && (
+                                <span style={{ fontSize: '11px', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <Clock size={11} /> {formatISTTime(s.phase1_marked_at)}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 2nd Window */}
+                          <td style={{ padding: '12px 14px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{
+                                padding: '3px 8px',
+                                borderRadius: '8px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                width: 'fit-content',
+                                backgroundColor: s.phase2_status === 'Present' ? '#ecfdf5' : (s.phase2_status === 'Late' ? '#fef3c7' : (s.phase2_status === 'Not Eligible' ? '#f1f5f9' : (s.phase2_status === 'Leave' ? '#ede9fe' : '#fef2f2'))),
+                                color: s.phase2_status === 'Present' ? '#166534' : (s.phase2_status === 'Late' ? '#92400e' : (s.phase2_status === 'Not Eligible' ? '#64748b' : (s.phase2_status === 'Leave' ? '#6d28d9' : '#991b1b')))
+                              }}>
+                                {s.phase2_status === 'Not Eligible' ? '🚫 Not Eligible' : (s.phase2_status === 'Leave' ? '🏖️ Leave' : s.phase2_status)}
+                              </span>
+                              {s.phase2_marked_at && (
+                                <span style={{ fontSize: '11px', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <Clock size={11} /> {formatISTTime(s.phase2_marked_at)}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Overall Status */}
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              backgroundColor: s.overall_status === 'Complete' ? '#ecfdf5' : (s.overall_status === 'Incomplete' ? '#fffbeb' : (s.overall_status === 'Leave' ? '#ede9fe' : '#fef2f2')),
+                              color: s.overall_status === 'Complete' ? '#166534' : (s.overall_status === 'Incomplete' ? '#b45309' : (s.overall_status === 'Leave' ? '#6d28d9' : '#991b1b')),
+                              border: s.overall_status === 'Complete' ? '1px solid #bbf7d0' : (s.overall_status === 'Incomplete' ? '1px solid #fde68a' : '1px solid #fecaca')
+                            }}>
+                              {s.overall_status === 'Complete' ? '✓ Complete' : (s.overall_status === 'Incomplete' ? '⚠️ Incomplete' : (s.overall_status === 'Leave' ? '🏖️ Leave' : '❌ Absent'))}
+                            </span>
+                          </td>
+                        </>
+                      ) : viewMode === 'first' ? (
+                        <>
+                          <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                            {s.phase1_marked_at ? (
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>
+                                <Clock size={12} color="#64748b" style={{ display: 'inline', marginRight: '4px' }} />
+                                {formatISTTime(s.phase1_marked_at)}
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              backgroundColor: s.phase1_status === 'Present' ? '#ecfdf5' : (s.phase1_status === 'Late' ? '#fef3c7' : (s.phase1_status === 'Leave' ? '#ede9fe' : '#fef2f2')),
+                              color: s.phase1_status === 'Present' ? '#166534' : (s.phase1_status === 'Late' ? '#92400e' : (s.phase1_status === 'Leave' ? '#6d28d9' : '#991b1b'))
+                            }}>
+                              {s.phase1_status}
+                            </span>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                            {s.phase2_marked_at ? (
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b' }}>
+                                <Clock size={12} color="#64748b" style={{ display: 'inline', marginRight: '4px' }} />
+                                {formatISTTime(s.phase2_marked_at)}
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              backgroundColor: s.phase2_status === 'Present' ? '#ecfdf5' : (s.phase2_status === 'Late' ? '#fef3c7' : (s.phase2_status === 'Not Eligible' ? '#f1f5f9' : '#fef2f2')),
+                              color: s.phase2_status === 'Present' ? '#166534' : (s.phase2_status === 'Late' ? '#92400e' : (s.phase2_status === 'Not Eligible' ? '#64748b' : '#991b1b'))
+                            }}>
+                              {s.phase2_status === 'Not Eligible' ? '🚫 Not Eligible' : s.phase2_status}
+                            </span>
+                          </td>
+                        </>
+                      )
+                    ) : (
+                      /* SINGLE ATTENDANCE COLUMNS */
+                      <>
+                        <td style={{ padding: '12px 14px' }}>
+                          <span style={{
+                            padding: '4px 10px',
+                            borderRadius: '12px',
                             fontSize: '12px',
+                            fontWeight: 700,
+                            backgroundColor: s.status === 'Present' ? '#ecfdf5' : (s.status === 'Late' ? '#fef3c7' : (s.status === 'Leave' ? '#ede9fe' : '#fef2f2')),
+                            color: s.status === 'Present' ? '#166534' : (s.status === 'Late' ? '#92400e' : (s.status === 'Leave' ? '#6d28d9' : '#991b1b')),
+                            border: s.status === 'Leave' ? '1px solid #ddd6fe' : undefined,
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '6px'
-                          }}
-                        >
-                          <UserCheck size={14} />
-                          {s.status === 'Absent' ? 'Mark Manual' : 'Edit Mark'}
-                        </button>
+                            gap: '4px'
+                          }}>
+                            {s.status === 'Leave' ? '🏖️ Leave' : s.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                          {s.marked_at && (s.status === 'Present' || s.status === 'Late') ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: '#1e293b',
+                              backgroundColor: '#f8fafc',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #e2e8f0'
+                            }}>
+                              <Clock size={12} color="#64748b" />
+                              {formatISTTime(s.marked_at)}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontSize: '13px' }}>—</span>
+                          )}
+                        </td>
+                      </>
+                    )}
 
-                        {(s.status === 'Present' || s.status === 'Late' || s.is_present) && (
+                    <td style={{ padding: '12px 14px', maxWidth: '200px' }}>
+                      <ExpandableReasonTooltip
+                        text={s.remarks || s.reason || ''}
+                        maxLength={32}
+                        color="#475569"
+                      />
+                    </td>
+
+                    {!isViewOnly && (
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                          {/* View Full Student Attendance Details (Section 6) */}
+                          {isMultipleAttendance && (
+                            <button
+                              type="button"
+                              onClick={() => setStudentDetailsModal(s)}
+                              title="View Student Attendance Details"
+                              style={{
+                                padding: '6px 10px',
+                                backgroundColor: '#f0fdf4',
+                                color: '#166534',
+                                border: '1px solid #bbf7d0',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Eye size={13} /> Details
+                            </button>
+                          )}
+
                           <button
-                            onClick={() => handleDeleteSingleStudent(s)}
-                            disabled={submittingAction}
-                            title="Remove Attendance Record"
+                            onClick={() => openManualModal(s, isMultipleAttendance && viewMode === 'second' ? 2 : 1)}
                             style={{
-                              padding: '6px 10px',
-                              backgroundColor: '#fef2f2',
-                              color: '#dc2626',
-                              border: '1px solid #fecaca',
+                              padding: '6px 12px',
+                              backgroundColor: s.status === 'Absent' ? '#e0e7ff' : '#f1f5f9',
+                              color: s.status === 'Absent' ? '#4338ca' : '#334155',
+                              border: '1px solid ' + (s.status === 'Absent' ? '#c7d2fe' : '#cbd5e1'),
                               borderRadius: '8px',
                               fontWeight: 700,
-                              cursor: submittingAction ? 'not-allowed' : 'pointer',
+                              cursor: 'pointer',
                               fontSize: '12px',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              justifyContent: 'center'
+                              gap: '4px'
                             }}
                           >
-                            <Trash2 size={14} />
+                            <UserCheck size={13} />
+                            {s.status === 'Absent' ? 'Manual' : 'Edit'}
                           </button>
-                        )}
-                      </div>
+
+                          {(s.status === 'Present' || s.status === 'Late' || s.is_present || s.phase1_marked || s.phase2_marked) && (
+                            <button
+                              onClick={() => handleDeleteSingleStudent(s)}
+                              disabled={submittingAction}
+                              title="Remove Attendance Record"
+                              style={{
+                                padding: '6px 9px',
+                                backgroundColor: '#fef2f2',
+                                color: '#dc2626',
+                                border: '1px solid #fecaca',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                                cursor: submittingAction ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+                {filteredAttendance.length === 0 && (
+                  <tr>
+                    <td colSpan={isViewOnly ? 7 : 8} style={{ padding: '36px', textAlign: 'center', color: '#94a3b8' }}>
+                      No students match the criteria for {attendanceDate}.
                     </td>
-                  )}
-                </tr>
-              ))}
-              {filteredAttendance.length === 0 && (
-                <tr>
-                  <td colSpan={isViewOnly ? 6 : 7} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>
-                    No students match the criteria for {attendanceDate}.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </HamsCard>
       )}
 
@@ -1899,9 +2747,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               style={{ width: '160px' }}
             />
 
-            <select 
-              value={absentFloorFilter} 
-              onChange={e => setAbsentFloorFilter(e.target.value)} 
+            <select
+              value={absentFloorFilter}
+              onChange={e => setAbsentFloorFilter(e.target.value)}
               style={{ width: '130px' }}
             >
               <option value="All">All Floors</option>
@@ -1910,9 +2758,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               ))}
             </select>
 
-            <select 
-              value={absentStatusFilter} 
-              onChange={e => setAbsentStatusFilter(e.target.value)} 
+            <select
+              value={absentStatusFilter}
+              onChange={e => setAbsentStatusFilter(e.target.value)}
               style={{ width: '140px' }}
             >
               <option value="All">All Status</option>
@@ -2333,13 +3181,56 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                   {manualModal.student.name} ({manualModal.student.student_code}) • Floor {manualModal.student.floor_id} • Room {manualModal.student.room_number || 'N/A'}
                 </p>
               </div>
-              <button 
-                onClick={() => setManualModal(null)} 
+              <button
+                onClick={() => setManualModal(null)}
                 style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
               >
                 <X size={20} />
               </button>
             </div>
+
+            {/* Attendance Window Selector (When Multiple Attendance is Active) */}
+            {isMultipleAttendance && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+                  Select Attendance Window / Phase:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setManualModal({ ...manualModal, phase: 1 })}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: (manualModal.phase || 1) === 1 ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+                      backgroundColor: (manualModal.phase || 1) === 1 ? '#eef2ff' : '#ffffff',
+                      color: (manualModal.phase || 1) === 1 ? '#4338ca' : '#475569',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    1️⃣ First Window ({twoPhaseWindows?.first?.start_time ? format12Hour(twoPhaseWindows.first.start_time) : ''})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManualModal({ ...manualModal, phase: 2 })}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: manualModal.phase === 2 ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                      backgroundColor: manualModal.phase === 2 ? '#f5f3ff' : '#ffffff',
+                      color: manualModal.phase === 2 ? '#6d28d9' : '#475569',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    2️⃣ Second Window ({twoPhaseWindows?.second?.start_time ? format12Hour(twoPhaseWindows.second.start_time) : ''})
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Attendance Status Type: Regular or Late */}
             <div style={{ marginBottom: '18px' }}>
@@ -2405,11 +3296,11 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                 value={manualModal.description}
                 onChange={e => setManualModal({ ...manualModal, description: e.target.value })}
                 placeholder="E.g. In room sick, Bluetooth connection issue, Warden permission granted..."
-                style={{ 
-                  width: '100%', 
-                  padding: '10px 14px', 
-                  borderRadius: '8px', 
-                  border: '1px solid #cbd5e1', 
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
                   fontFamily: 'inherit',
                   fontSize: '13px',
                   resize: 'vertical'
@@ -2419,11 +3310,11 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
 
             {/* Actions */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-              {(manualModal.student.status === 'Present' || manualModal.student.status === 'Late' || manualModal.student.is_present) ? (
+              {(manualModal.student.status === 'Present' || manualModal.student.status === 'Late' || manualModal.student.is_present || manualModal.student.phase1_marked || manualModal.student.phase2_marked) ? (
                 <button
                   type="button"
                   disabled={submittingAction}
-                  onClick={() => handleDeleteSingleStudent(manualModal.student)}
+                  onClick={() => handleDeleteSingleStudent(manualModal.student, manualModal.phase)}
                   style={{
                     padding: '10px 16px',
                     background: '#fef2f2',
@@ -2446,12 +3337,12 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                 <button
                   type="button"
                   onClick={() => setManualModal(null)}
-                  style={{ 
-                    padding: '10px 18px', 
-                    background: '#f1f5f9', 
-                    border: '1px solid #cbd5e1', 
-                    borderRadius: '8px', 
-                    cursor: 'pointer', 
+                  style={{
+                    padding: '10px 18px',
+                    background: '#f1f5f9',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
                     fontWeight: 600,
                     fontSize: '13px',
                     color: '#475569'
@@ -2463,13 +3354,13 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                   type="button"
                   disabled={submittingAction}
                   onClick={handleSaveManualAttendance}
-                  style={{ 
-                    padding: '10px 20px', 
-                    background: manualModal.status === 'Late' ? '#d97706' : '#10b981', 
-                    color: '#ffffff', 
-                    border: 'none', 
-                    borderRadius: '8px', 
-                    cursor: submittingAction ? 'not-allowed' : 'pointer', 
+                  style={{
+                    padding: '10px 20px',
+                    background: manualModal.status === 'Late' ? '#d97706' : '#10b981',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: submittingAction ? 'not-allowed' : 'pointer',
                     fontWeight: 700,
                     fontSize: '13px',
                     display: 'inline-flex',
@@ -2480,6 +3371,188 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                   {submittingAction ? 'Saving...' : `Mark as ${manualModal.status}`}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL: INDIVIDUAL STUDENT ATTENDANCE DETAILS (Section 6 of requirements) */}
+      {selectedStudentDetails && createPortal(
+        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setSelectedStudentDetails(null); }}>
+          <div className="modal-content-card" style={{ maxWidth: '580px' }} onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px', borderBottom: '1px solid #f1f5f9', paddingBottom: '14px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                    {selectedStudentDetails.name}
+                  </h3>
+                  <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800, backgroundColor: '#eff6ff', color: '#2563eb', fontFamily: 'monospace' }}>
+                    {selectedStudentDetails.student_code}
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                  Floor {selectedStudentDetails.floor_id} • Room {selectedStudentDetails.room_number || 'N/A'} • Phone: {selectedStudentDetails.phone_number || '—'}
+                </p>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#94a3b8' }}>
+                  Session: <strong>{sessionName}</strong> • Date: <strong>{attendanceDate}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedStudentDetails(null)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content Cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+              {/* Window 1 Card */}
+              <div style={{ padding: '14px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ backgroundColor: '#4f46e5', color: '#fff', fontSize: '11px', fontWeight: 800, padding: '2px 8px', borderRadius: '6px' }}>1st Attendance</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>
+                      Window: {format12Hour(twoPhaseWindows?.first?.start_time || startTime)} – {format12Hour(twoPhaseWindows?.first?.end_time || endTime)}
+                    </span>
+                  </div>
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    backgroundColor: selectedStudentDetails.phase1_status === 'Present' ? '#ecfdf5' : (selectedStudentDetails.phase1_status === 'Late' ? '#fef3c7' : '#fef2f2'),
+                    color: selectedStudentDetails.phase1_status === 'Present' ? '#166534' : (selectedStudentDetails.phase1_status === 'Late' ? '#92400e' : '#991b1b')
+                  }}>
+                    {selectedStudentDetails.phase1_status}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', color: '#475569' }}>
+                  <div>
+                    <strong>Marking Time:</strong> {formatISTTime(selectedStudentDetails.phase1_marked_at)}
+                  </div>
+                  <div>
+                    <strong>Punctuality:</strong> {selectedStudentDetails.phase1_is_late ? '⚠️ Late Arrival' : (selectedStudentDetails.phase1_marked ? '✅ On-Time' : '—')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Window 2 Card */}
+              <div style={{ padding: '14px 16px', borderRadius: '12px', border: '1.5px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '11px', fontWeight: 800, padding: '2px 8px', borderRadius: '6px' }}>2nd Attendance</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>
+                      Window: {format12Hour(twoPhaseWindows?.second?.start_time || phase2StartTime)} – {format12Hour(twoPhaseWindows?.second?.end_time || phase2EndTime)}
+                    </span>
+                  </div>
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    backgroundColor: selectedStudentDetails.phase2_status === 'Present' ? '#ecfdf5' : (selectedStudentDetails.phase2_status === 'Late' ? '#fef3c7' : (selectedStudentDetails.phase2_status === 'Not Eligible' ? '#f1f5f9' : '#fef2f2')),
+                    color: selectedStudentDetails.phase2_status === 'Present' ? '#166534' : (selectedStudentDetails.phase2_status === 'Late' ? '#92400e' : (selectedStudentDetails.phase2_status === 'Not Eligible' ? '#64748b' : '#991b1b'))
+                  }}>
+                    {selectedStudentDetails.phase2_status}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', color: '#475569', marginBottom: '6px' }}>
+                  <div>
+                    <strong>Marking Time:</strong> {formatISTTime(selectedStudentDetails.phase2_marked_at)}
+                  </div>
+                  <div>
+                    <strong>Punctuality:</strong> {selectedStudentDetails.phase2_is_late ? '⚠️ Late Arrival' : (selectedStudentDetails.phase2_marked ? '✅ On-Time' : '—')}
+                  </div>
+                </div>
+                <div style={{ fontSize: '12px', borderTop: '1px dashed #cbd5e1', paddingTop: '6px', color: selectedStudentDetails.phase2_is_eligible ? '#15803d' : '#b91c1c', fontWeight: 600 }}>
+                  {selectedStudentDetails.phase2_is_eligible ? (
+                    <span>✓ Eligible for 2nd attendance (Successfully marked 1st attendance)</span>
+                  ) : (
+                    <span>🚫 Not eligible (Missed 1st attendance window — barred from marking 2nd attendance)</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Overall Status Card */}
+              <div style={{
+                padding: '14px 16px',
+                borderRadius: '12px',
+                border: '1.5px solid ' + (selectedStudentDetails.overall_status === 'Complete' ? '#bbf7d0' : (selectedStudentDetails.overall_status === 'Incomplete' ? '#fde68a' : '#fecaca')),
+                backgroundColor: selectedStudentDetails.overall_status === 'Complete' ? '#f0fdf4' : (selectedStudentDetails.overall_status === 'Incomplete' ? '#fffbeb' : '#fef2f2')
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>Overall Attendance Status</span>
+                    <h4 style={{ margin: '2px 0 0 0', fontSize: '16px', fontWeight: 800, color: selectedStudentDetails.overall_status === 'Complete' ? '#15803d' : (selectedStudentDetails.overall_status === 'Incomplete' ? '#b45309' : '#b91c1c') }}>
+                      {selectedStudentDetails.overall_status === 'Complete' ? '🌟 Complete (Attended Both Windows)' : (selectedStudentDetails.overall_status === 'Incomplete' ? '⚠️ Incomplete (Attended 1st Window Only)' : '❌ Absent (Missed Attendance)')}
+                    </h4>
+                  </div>
+                  <span style={{
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    backgroundColor: selectedStudentDetails.overall_status === 'Complete' ? '#15803d' : (selectedStudentDetails.overall_status === 'Incomplete' ? '#b45309' : '#b91c1c'),
+                    color: '#ffffff'
+                  }}>
+                    {selectedStudentDetails.overall_status}
+                  </span>
+                </div>
+                {selectedStudentDetails.remarks && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#475569', fontStyle: 'italic' }}>
+                    Remarks: {selectedStudentDetails.remarks}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {!isViewOnly ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const stu = selectedStudentDetails;
+                    setSelectedStudentDetails(null);
+                    openManualModal(stu, 1);
+                  }}
+                  style={{
+                    padding: '8px 14px',
+                    backgroundColor: '#e0e7ff',
+                    color: '#4338ca',
+                    border: '1px solid #c7d2fe',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <UserCheck size={14} /> Mark Manual Attendance
+                </button>
+              ) : <div />}
+
+              <button
+                type="button"
+                onClick={() => setSelectedStudentDetails(null)}
+                style={{
+                  padding: '8px 18px',
+                  backgroundColor: '#f1f5f9',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  color: '#475569',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>,
@@ -2499,8 +3572,8 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                   {justifyModal.student.name} ({justifyModal.student.student_code}) • Floor {justifyModal.student.floor_id} • Room {justifyModal.student.room_number || 'N/A'}
                 </p>
               </div>
-              <button 
-                onClick={() => setJustifyModal(null)} 
+              <button
+                onClick={() => setJustifyModal(null)}
                 style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
               >
                 <X size={20} />
@@ -2508,13 +3581,13 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             </div>
 
             {justifyModal.error && (
-              <div style={{ 
-                padding: '10px 14px', 
-                backgroundColor: '#fef2f2', 
-                border: '1px solid #fecaca', 
-                borderRadius: '8px', 
-                color: '#b91c1c', 
-                fontSize: '13px', 
+              <div style={{
+                padding: '10px 14px',
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                color: '#b91c1c',
+                fontSize: '13px',
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
@@ -2535,11 +3608,11 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                 value={justifyModal.reason}
                 onChange={e => setJustifyModal({ ...justifyModal, reason: e.target.value, error: undefined })}
                 placeholder="Give proper detailed reason for absence / late arrival (e.g. Medical emergency at hospital, College sports event, On approved weekend leave)..."
-                style={{ 
-                  width: '100%', 
-                  padding: '12px 14px', 
-                  borderRadius: '8px', 
-                  border: justifyModal.error ? '2px solid #ef4444' : '1px solid #cbd5e1', 
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  border: justifyModal.error ? '2px solid #ef4444' : '1px solid #cbd5e1',
                   fontFamily: 'inherit',
                   fontSize: '13px',
                   resize: 'vertical'
@@ -2551,12 +3624,12 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               <button
                 type="button"
                 onClick={() => setJustifyModal(null)}
-                style={{ 
-                  padding: '10px 18px', 
-                  background: '#f1f5f9', 
-                  border: '1px solid #cbd5e1', 
-                  borderRadius: '8px', 
-                  cursor: 'pointer', 
+                style={{
+                  padding: '10px 18px',
+                  background: '#f1f5f9',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
                   fontWeight: 600,
                   fontSize: '13px',
                   color: '#475569'
@@ -2568,13 +3641,13 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
                 type="button"
                 disabled={submittingAction}
                 onClick={handleSaveJustification}
-                style={{ 
-                  padding: '10px 20px', 
-                  background: '#3b82f6', 
-                  color: '#ffffff', 
-                  border: 'none', 
-                  borderRadius: '8px', 
-                  cursor: submittingAction ? 'not-allowed' : 'pointer', 
+                style={{
+                  padding: '10px 20px',
+                  background: '#3b82f6',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: submittingAction ? 'not-allowed' : 'pointer',
                   fontWeight: 700,
                   fontSize: '13px',
                   display: 'inline-flex',
