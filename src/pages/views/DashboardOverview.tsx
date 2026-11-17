@@ -9,7 +9,6 @@ import {
   RefreshCw, 
   BarChart2, 
   Radio, 
-  AlertTriangle,
   Search,
   MessageSquare,
   FileText,
@@ -18,13 +17,41 @@ import {
   Phone,
   Calendar,
   RotateCcw,
-  History
+  History,
+  Cake,
+  Send,
+  ExternalLink,
+  Layers,
+  Image as ImageIcon
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import apiClient from '../../services/apiClient';
 import { HamsCard } from '../../components/HamsCard';
 import { renderSessionIcon } from '../../utils/sessionIcons';
-import { ExpandableReasonTooltip } from '../../components/ExpandableReasonTooltip';
+
+interface BirthdayStudent {
+  studentId: number;
+  name: string;
+  studentCode: string;
+  floorId?: number;
+  isActive?: boolean;
+  phone: string;
+  whatsappNumber: string;
+  parentPhone?: string;
+  room: string;
+  dob: string;
+  groupName?: string | null;
+  status?: string | null;
+  alreadySentToday: boolean;
+}
+
+interface WhatsAppTemplateItem {
+  id: number;
+  name: string;
+  category: string;
+  content: string;
+  image_url?: string | null;
+}
 
 export const DashboardOverview: React.FC = () => {
   const todayStr = new Date().toLocaleDateString('en-CA');
@@ -35,27 +62,94 @@ export const DashboardOverview: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  // Leave Attendance Discrepancies Filters & Justification Modal
-  const [leaveSearch, setLeaveSearch] = useState('');
-  const [leaveFloor, setLeaveFloor] = useState('All');
-  const [leaveJustifyFilter, setLeaveJustifyFilter] = useState<'all' | 'unjustified' | 'justified'>('all');
-  const [justifyModal, setJustifyModal] = useState<{ isOpen: boolean; student: any; reason: string; error?: string } | null>(null);
-  const [submittingJustify, setSubmittingJustify] = useState(false);
+  // Today's Birthdays & WhatsApp Wish Modal State
+  const [birthdayStudents, setBirthdayStudents] = useState<BirthdayStudent[]>([]);
+  const [loadingBirthdays, setLoadingBirthdays] = useState(true);
+  const [isWhatsAppConnected, setIsWhatsAppConnected] = useState(false);
+  const [birthdaySearch, setBirthdaySearch] = useState('');
+  const [birthdayFilter, setBirthdayFilter] = useState<'active' | 'all'>('active');
+
+  const [waTemplates, setWaTemplates] = useState<WhatsAppTemplateItem[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+  const [waModal, setWaModal] = useState<{
+    isOpen: boolean;
+    student: BirthdayStudent;
+    mode: 'template' | 'manual';
+    selectedTemplateId: number | null;
+    phone: string;
+    message: string;
+    imageUrl: string | null;
+    error?: string;
+    success?: string;
+  } | null>(null);
+  const [sendingWa, setSendingWa] = useState(false);
 
   const isToday = selectedDate === todayStr;
+
+  const computeTurningAge = (dobStr?: string): number | null => {
+    if (!dobStr) return null;
+    const year = parseInt(dobStr.slice(0, 4), 10);
+    if (isNaN(year) || year < 1900) return null;
+    const currentYear = new Date().getFullYear();
+    const age = currentYear - year;
+    return age > 0 && age < 120 ? age : null;
+  };
+
+  const applyTemplateVariables = (rawText: string, student: BirthdayStudent): string => {
+    const todayDisplay = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const age = computeTurningAge(student.dob);
+    const floorLabel = student.floorId ? `Floor ${student.floorId}` : 'Ground Floor';
+    return (rawText || '')
+      .replace(/\{name\}/gi, student.name || 'Student')
+      .replace(/\{student_name\}/gi, student.name || 'Student')
+      .replace(/\{code\}/gi, student.studentCode || '')
+      .replace(/\{student_code\}/gi, student.studentCode || '')
+      .replace(/\{bank_code\}/gi, student.studentCode || '')
+      .replace(/\{room\}/gi, student.room || 'N/A')
+      .replace(/\{floor\}/gi, floorLabel)
+      .replace(/\{group\}/gi, student.groupName || '')
+      .replace(/\{date\}/gi, todayDisplay)
+      .replace(/\{age\}/gi, age ? String(age) : '');
+  };
+
+  const fetchBirthdaysAndTemplates = async () => {
+    setLoadingBirthdays(true);
+    try {
+      const [bRes, tRes] = await Promise.all([
+        apiClient.get('/whatsapp/birthday'),
+        apiClient.get('/whatsapp/templates')
+      ]);
+      if (bRes.data?.success && bRes.data.data) {
+        setBirthdayStudents(bRes.data.data.todaysBirthdays || []);
+        setIsWhatsAppConnected(Boolean(bRes.data.data.isWhatsAppConnected));
+      }
+      if (tRes.data?.success && Array.isArray(tRes.data.data)) {
+        setWaTemplates(tRes.data.data);
+      }
+    } catch (e) {
+      console.error('Failed to load today birthdays or templates:', e);
+    } finally {
+      setLoadingBirthdays(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBirthdaysAndTemplates();
+  }, []);
 
   useEffect(() => {
     fetchStats(selectedSessionKey, true, selectedDate);
 
     // Live Real-Time Polling every 3 seconds (only active when viewing today's date)
     const interval = setInterval(() => {
-      if (!justifyModal?.isOpen && selectedDate === new Date().toLocaleDateString('en-CA')) {
+      if (!waModal?.isOpen && selectedDate === new Date().toLocaleDateString('en-CA')) {
         fetchStats(selectedSessionKey, false, selectedDate);
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [selectedSessionKey, justifyModal?.isOpen, selectedDate]);
+  }, [selectedSessionKey, waModal?.isOpen, selectedDate]);
 
   const fetchStats = async (sessionKey = selectedSessionKey, isInitial = false, dateStr = selectedDate) => {
     if (isInitial) setLoading(true);
@@ -81,46 +175,107 @@ export const DashboardOverview: React.FC = () => {
   const handleManualRefresh = () => {
     setRefreshing(true);
     fetchStats(selectedSessionKey, true, selectedDate);
+    fetchBirthdaysAndTemplates();
   };
 
-  // Submit Justification for Student Marked Attendance While on Leave
-  const handleSaveJustification = async () => {
-    if (!justifyModal) return;
-    const trimmed = justifyModal.reason.trim();
-    if (!trimmed) {
-      setJustifyModal({
-        ...justifyModal,
-        error: 'Please enter verification / meeting notes!'
-      });
+  const openBirthdayWhatsAppModal = async (student: BirthdayStudent) => {
+    setLoadingTemplates(true);
+    let templatesList = waTemplates;
+    try {
+      const tRes = await apiClient.get('/whatsapp/templates');
+      if (tRes.data?.success && Array.isArray(tRes.data.data)) {
+        templatesList = tRes.data.data;
+        setWaTemplates(templatesList);
+      }
+    } catch {}
+    setLoadingTemplates(false);
+
+    // Prefer a birthday-category template if admin created one, otherwise first template
+    const preferredTemplate =
+      templatesList.find(t => (t.category || '').toLowerCase().includes('birthday') || (t.name || '').toLowerCase().includes('birthday')) ||
+      templatesList[0] ||
+      null;
+
+    const initialMode: 'template' | 'manual' = preferredTemplate ? 'template' : 'manual';
+    const initialMsg = preferredTemplate
+      ? applyTemplateVariables(preferredTemplate.content, student)
+      : `🎂 Happy Birthday ${student.name}! Wishing you a wonderful year ahead filled with happiness, good health, and success. — AVD Hostel`;
+
+    setWaModal({
+      isOpen: true,
+      student,
+      mode: initialMode,
+      selectedTemplateId: preferredTemplate ? preferredTemplate.id : null,
+      phone: student.whatsappNumber || student.phone || '',
+      message: initialMsg,
+      imageUrl: preferredTemplate?.image_url || null,
+      error: undefined,
+      success: undefined
+    });
+  };
+
+  const handleSelectTemplateInModal = (templateId: number) => {
+    if (!waModal) return;
+    const tpl = waTemplates.find(t => t.id === templateId);
+    if (!tpl) return;
+    setWaModal({
+      ...waModal,
+      mode: 'template',
+      selectedTemplateId: tpl.id,
+      message: applyTemplateVariables(tpl.content, waModal.student),
+      imageUrl: tpl.image_url || null,
+      error: undefined,
+      success: undefined
+    });
+  };
+
+  const handleSendBirthdayWhatsApp = async () => {
+    if (!waModal) return;
+    const cleanPhone = waModal.phone.trim();
+    const cleanMsg = waModal.message.trim();
+    if (!cleanPhone) {
+      setWaModal({ ...waModal, error: 'Please enter a valid WhatsApp phone number.' });
+      return;
+    }
+    if (!cleanMsg) {
+      setWaModal({ ...waModal, error: 'Please select a template or write a message before sending.' });
       return;
     }
 
-    setSubmittingJustify(true);
+    setSendingWa(true);
+    setWaModal({ ...waModal, error: undefined, success: undefined });
     try {
-      const datesToJustify = justifyModal.student.marked_dates && justifyModal.student.marked_dates.length > 0
-        ? justifyModal.student.marked_dates
-        : [selectedDate];
-
-      const res = await apiClient.post('/admin/leave-attendance/justify', {
-        student_id: justifyModal.student.student_id,
-        student_code: justifyModal.student.student_code,
-        leave_id: justifyModal.student.leave_id,
-        session_dates: datesToJustify,
-        session_type: selectedSessionKey !== 'recent' && selectedSessionKey !== 'all' ? selectedSessionKey : 'night',
-        reason: trimmed,
-        is_justified: true
+      const res = await apiClient.post('/whatsapp/birthday/send-wish', {
+        student_id: waModal.student.studentId,
+        phone: cleanPhone,
+        text: cleanMsg,
+        image_url: waModal.mode === 'template' ? waModal.imageUrl : null,
+        recipient_type: 'student'
       });
 
-      if (res.data.success) {
-        setJustifyModal(null);
-        fetchStats(selectedSessionKey, false, selectedDate);
+      if (res.data?.success) {
+        setBirthdayStudents(prev =>
+          prev.map(st =>
+            st.studentId === waModal.student.studentId ? { ...st, alreadySentToday: true } : st
+          )
+        );
+        setWaModal({
+          ...waModal,
+          success: res.data.message || 'WhatsApp birthday message sent successfully!'
+        });
+        setTimeout(() => {
+          setWaModal(curr => (curr?.student.studentId === waModal.student.studentId ? null : curr));
+        }, 1600);
       } else {
-        alert(res.data.message || 'Failed to save justification');
+        setWaModal({ ...waModal, error: res.data?.message || 'Failed to send WhatsApp message.' });
       }
     } catch (e: any) {
-      alert(e.response?.data?.message || 'Failed to save justification');
+      setWaModal({
+        ...waModal,
+        error: e?.response?.data?.message || e?.message || 'Failed to send WhatsApp message.'
+      });
     } finally {
-      setSubmittingJustify(false);
+      setSendingWa(false);
     }
   };
 
@@ -181,21 +336,31 @@ export const DashboardOverview: React.FC = () => {
     };
   });
 
-  // Filter Students Marked Attendance While on Leave
-  const leaveDiscrepanciesList: any[] = stats?.leave_attendance_discrepancies || stats?.consecutive_absentees || [];
-  const filteredDiscrepancies = leaveDiscrepanciesList.filter(s => {
-    const matchesFloor = leaveFloor === 'All' || String(s.floor_id) === String(leaveFloor);
-    const matchesJustify = leaveJustifyFilter === 'all' || 
-      (leaveJustifyFilter === 'justified' && s.is_justified) ||
-      (leaveJustifyFilter === 'unjustified' && !s.is_justified);
-    const matchesSearch = !leaveSearch ||
-      String(s.student_code || '').toLowerCase().includes(leaveSearch.toLowerCase()) ||
-      String(s.name || '').toLowerCase().includes(leaveSearch.toLowerCase()) ||
-      String(s.room_number || '').toLowerCase().includes(leaveSearch.toLowerCase()) ||
-      String(s.phone_number || '').toLowerCase().includes(leaveSearch.toLowerCase()) ||
-      String(s.leave_reason || '').toLowerCase().includes(leaveSearch.toLowerCase());
-    return matchesFloor && matchesJustify && matchesSearch;
+  // Filter Today's Birthday Students
+  const isHostelActiveBirthday = (st: BirthdayStudent) => {
+    if (st.isActive === false) return false;
+    const room = (st.room || '').trim().toLowerCase();
+    const status = (st.status || '').trim().toLowerCase();
+    if (!room || room === 'n/a' || room === 'alumni') return false;
+    if (['alumni', 'left', 'cancel-admission', 'rejected-admission'].includes(status)) return false;
+    return true;
+  };
+
+  const filteredBirthdays = birthdayStudents.filter(st => {
+    if (birthdayFilter === 'active' && !isHostelActiveBirthday(st)) return false;
+    const q = birthdaySearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (st.name || '').toLowerCase().includes(q) ||
+      (st.studentCode || '').toLowerCase().includes(q) ||
+      (st.room || '').toLowerCase().includes(q) ||
+      (st.phone || '').toLowerCase().includes(q) ||
+      (st.whatsappNumber || '').toLowerCase().includes(q) ||
+      (st.groupName || '').toLowerCase().includes(q)
+    );
   });
+
+  const activeBirthdayCount = birthdayStudents.filter(isHostelActiveBirthday).length;
 
   return (
     <div className="dashboard-content-wrapper">
@@ -721,437 +886,599 @@ export const DashboardOverview: React.FC = () => {
         </HamsCard>
       </div>
 
-      {/* STUDENTS MARKED ATTENDANCE WHILE ON LEAVE TABLE */}
+      {/* TODAY'S BIRTHDAYS SECTION */}
       <HamsCard padding="24px">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
-                width: '36px',
-                height: '36px',
+                width: '38px',
+                height: '38px',
                 borderRadius: '10px',
-                backgroundColor: '#fff7ed',
-                color: '#ea580c',
+                backgroundColor: '#fdf2f8',
+                color: '#db2777',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '1px solid #fed7aa'
+                border: '1px solid #fbcfe8'
               }}>
-                <AlertTriangle size={20} />
+                <Cake size={20} />
               </div>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  Students Marked Attendance While on Leave
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  Today&apos;s Birthdays
                   <span style={{
                     fontSize: '11px',
                     fontWeight: 700,
-                    padding: '2px 8px',
+                    padding: '2px 9px',
                     borderRadius: '12px',
-                    backgroundColor: filteredDiscrepancies.length > 0 ? '#ffedd5' : '#f1f5f9',
-                    color: filteredDiscrepancies.length > 0 ? '#c2410c' : '#64748b'
+                    backgroundColor: filteredBirthdays.length > 0 ? '#fce7f3' : '#f1f5f9',
+                    color: filteredBirthdays.length > 0 ? '#be185d' : '#64748b'
                   }}>
-                    {filteredDiscrepancies.length} Record{filteredDiscrepancies.length === 1 ? '' : 's'}
+                    {filteredBirthdays.length} Student{filteredBirthdays.length === 1 ? '' : 's'}
+                  </span>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '2px 9px',
+                    borderRadius: '12px',
+                    backgroundColor: '#eff6ff',
+                    color: '#2563eb'
+                  }}>
+                    {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                   </span>
                 </h3>
                 <p style={{ fontSize: '13px', color: '#64748b', margin: '2px 0 0 0' }}>
-                  Students who marked attendance while having an active approved leave. Verify physical presence in hostel and record meeting status.
+                  Students celebrating their birthday today. Send personalized wishes via WhatsApp using an admin template or a custom message.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Filters for Discrepancy Table */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
-            <select 
-              value={leaveJustifyFilter} 
-              onChange={e => setLeaveJustifyFilter(e.target.value as any)} 
-              style={{ minWidth: '190px', height: '40px', fontSize: '13px', fontWeight: 600, padding: '0 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
-            >
-              <option value="all">All Discrepancies</option>
-              <option value="unjustified">Action Required (Unmet)</option>
-              <option value="justified">Met & Justified Only</option>
-            </select>
+          {/* Filters for Today's Birthdays */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'inline-flex', backgroundColor: '#f1f5f9', padding: '3px', borderRadius: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setBirthdayFilter('active')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backgroundColor: birthdayFilter === 'active' ? '#ffffff' : 'transparent',
+                  color: birthdayFilter === 'active' ? '#db2777' : '#64748b',
+                  boxShadow: birthdayFilter === 'active' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                }}
+              >
+                Active Hostel ({activeBirthdayCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setBirthdayFilter('all')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  backgroundColor: birthdayFilter === 'all' ? '#ffffff' : 'transparent',
+                  color: birthdayFilter === 'all' ? '#db2777' : '#64748b',
+                  boxShadow: birthdayFilter === 'all' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                }}
+              >
+                All ({birthdayStudents.length})
+              </button>
+            </div>
 
-            <select 
-              value={leaveFloor} 
-              onChange={e => setLeaveFloor(e.target.value)} 
-              style={{ minWidth: '140px', height: '40px', fontSize: '13px', fontWeight: 600, padding: '0 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
-            >
-              <option value="All">All Floors</option>
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fl => (
-                <option key={fl} value={String(fl)}>Floor {fl === 0 ? '0 (Ground)' : fl}</option>
-              ))}
-            </select>
-
-            <div style={{ position: 'relative', minWidth: '240px' }}>
+            <div style={{ position: 'relative', minWidth: '220px' }}>
               <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input
                 type="text"
-                placeholder="Search by ID, Name, Room, Reason..."
-                value={leaveSearch}
-                onChange={e => setLeaveSearch(e.target.value)}
-                style={{ width: '100%', height: '40px', paddingLeft: '36px', paddingRight: '12px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff' }}
+                placeholder="Search by Name, ID, Room..."
+                value={birthdaySearch}
+                onChange={e => setBirthdaySearch(e.target.value)}
+                style={{ width: '100%', height: '38px', paddingLeft: '36px', paddingRight: '12px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', boxSizing: 'border-box' }}
               />
             </div>
 
             <span style={{
-              padding: '8px 16px',
+              padding: '6px 12px',
               borderRadius: '20px',
-              backgroundColor: filteredDiscrepancies.length > 0 
-                ? (leaveJustifyFilter === 'justified' ? '#ecfdf5' : '#fff7ed') 
-                : '#f8fafc',
-              color: filteredDiscrepancies.length > 0 
-                ? (leaveJustifyFilter === 'justified' ? '#047857' : '#c2410c') 
-                : '#64748b',
-              fontSize: '13px',
-              fontWeight: 800,
+              backgroundColor: isWhatsAppConnected ? '#ecfdf5' : '#fffbeb',
+              color: isWhatsAppConnected ? '#047857' : '#b45309',
+              border: `1px solid ${isWhatsAppConnected ? '#a7f3d0' : '#fde68a'}`,
+              fontSize: '12px',
+              fontWeight: 700,
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+              gap: '6px'
             }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: filteredDiscrepancies.length > 0 ? (leaveJustifyFilter === 'justified' ? '#10b981' : '#ea580c') : '#94a3b8' }}></span>
-              {filteredDiscrepancies.length} {leaveJustifyFilter === 'justified' ? 'Justified' : leaveJustifyFilter === 'unjustified' ? 'Pending Action' : 'Total'}
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: isWhatsAppConnected ? '#10b981' : '#f59e0b' }} />
+              {isWhatsAppConnected ? 'WhatsApp Connected' : 'WhatsApp Offline'}
             </span>
           </div>
         </div>
 
-        {/* Table */}
+        {/* Today's Birthdays Table */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b' }}>
                 <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Code</th>
                 <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Student Name</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Tag</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Floor</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Room No.</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Contact</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Approved Leave Period & Reason</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Marked on Leave (Times & Dates)</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Meeting Status</th>
-                <th style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Floor &amp; Room</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Group</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>WhatsApp / Contact</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>DOB &amp; Age</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Wish Status</th>
+                <th style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredDiscrepancies.map((s: any) => (
-                <tr key={`${s.student_code}_${s.leave_id}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '12px 14px', fontWeight: 800, color: '#2563eb', whiteSpace: 'nowrap' }}>
-                    {s.student_code}
+              {loadingBirthdays ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>
+                    Loading today&apos;s birthdays...
                   </td>
-                  <td style={{ padding: '12px 14px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
-                    {s.name}
-                  </td>
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      {s.tags && s.tags.length > 0 ? (
-                        s.tags.map((tag: any) => (
-                          <span
-                            key={tag.id || tag.tag_id || tag.name}
-                            style={{
-                              padding: '3px 10px',
-                              borderRadius: '8px',
-                              fontSize: '11px',
-                              fontWeight: 800,
-                              backgroundColor: tag.name === 'Regular' ? '#ecfdf5' : tag.name === 'Late' ? '#fef2f2' : '#fffbeb',
-                              color: tag.color || (tag.name === 'Regular' ? '#059669' : tag.name === 'Late' ? '#dc2626' : '#d97706'),
-                              border: `1.5px solid ${tag.color || (tag.name === 'Regular' ? '#10b981' : tag.name === 'Late' ? '#ef4444' : '#f59e0b')}40`,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                            }}
-                          >
-                            🏷️ {tag.name}
-                          </span>
-                        ))
-                      ) : (
-                        <span
-                          style={{
-                            padding: '3px 10px',
-                            borderRadius: '8px',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            backgroundColor: '#fffbeb',
-                            color: '#d97706',
-                            border: '1.5px solid #fde68a',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          🏷️ Irregular
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                    <span style={{
-                      padding: '4px 10px',
-                      backgroundColor: '#f1f5f9',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: '#334155',
-                      display: 'inline-block',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {s.floor_name || (s.floor_id === 0 ? 'Ground Floor' : `Floor ${s.floor_id}`)}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                    <span style={{
-                      padding: '4px 10px',
-                      backgroundColor: '#eff6ff',
-                      border: '1px solid #bfdbfe',
-                      color: '#1d4ed8',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 800,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      🚪 Room {s.room_number || 'N/A'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 14px', color: '#475569', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                    {s.phone_number ? (
-                      <a 
-                        href={`tel:${s.phone_number}`}
-                        style={{ color: '#0284c7', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
+                </tr>
+              ) : filteredBirthdays.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
+                    🎂 No {birthdayFilter === 'active' ? 'active hostel ' : ''}student birthdays today ({new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}).
+                    {birthdayFilter === 'active' && birthdayStudents.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setBirthdayFilter('all')}
+                        style={{ marginLeft: '8px', background: 'none', border: 'none', color: '#db2777', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                       >
-                        <Phone size={13} /> {s.phone_number}
-                      </a>
-                    ) : (
-                      '—'
+                        View {birthdayStudents.length} alumni/inactive birthday(s)
+                      </button>
                     )}
                   </td>
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <span style={{
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        color: '#1e40af',
-                        backgroundColor: '#eff6ff',
-                        border: '1px solid #dbeafe',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        width: 'fit-content',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
-                        🌴 {formatDateShort(s.leave_start)} – {formatDateShort(s.leave_end)}
-                      </span>
-                      {s.leave_reason && (
-                        <span style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          "{s.leave_reason}"
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{
-                        fontSize: '12px',
-                        fontWeight: 800,
-                        color: '#ea580c',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
-                        ⚠️ Marked {s.marked_count} {s.marked_count === 1 ? 'time' : 'times'} on leave:
-                      </span>
-                      <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '5px', alignItems: 'center' }}>
-                        {(s.marked_dates || []).map((d: string) => (
-                          <span 
-                            key={d} 
-                            style={{
-                              padding: '2px 7px',
-                              backgroundColor: '#fff7ed',
-                              color: '#c2410c',
-                              border: '1px solid #fed7aa',
-                              borderRadius: '5px',
-                              fontSize: '11px',
+                </tr>
+              ) : (
+                filteredBirthdays.map((st) => {
+                  const age = computeTurningAge(st.dob);
+                  const isActiveHostel = isHostelActiveBirthday(st);
+                  return (
+                    <tr key={st.studentId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 14px', fontWeight: 800, color: '#2563eb', whiteSpace: 'nowrap' }}>
+                        {st.studentCode}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '16px' }}>🎂</span>
+                          <div>
+                            <div>{st.name}</div>
+                            {!isActiveHostel && (
+                              <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '6px', backgroundColor: '#f1f5f9', color: '#64748b' }}>
+                                {st.status || 'Alumni / Inactive'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        {isActiveHostel ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{
+                              padding: '3px 9px',
+                              backgroundColor: '#f1f5f9',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              fontSize: '12px',
                               fontWeight: 700,
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {formatDateShort(d)}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                    {s.is_justified ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <span style={{
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          backgroundColor: '#ecfdf5',
-                          color: '#065f46',
-                          border: '1px solid #a7f3d0',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          width: 'fit-content',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          <CheckCircle2 size={13} /> Met & Justified
-                        </span>
-                        {s.justification_reason && (
-                          <ExpandableReasonTooltip
-                            text={s.justification_reason}
-                            maxLength={35}
-                            color="#059669"
-                          />
+                              color: '#334155'
+                            }}>
+                              {st.floorId ? `Floor ${st.floorId}` : 'Ground'}
+                            </span>
+                            <span style={{
+                              padding: '3px 9px',
+                              backgroundColor: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              color: '#1d4ed8',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: 800
+                            }}>
+                              Room {st.room}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>No Room</span>
                         )}
-                      </div>
-                    ) : (
-                      <span style={{
-                        padding: '4px 10px',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        backgroundColor: '#fff7ed',
-                        color: '#c2410c',
-                        border: '1px solid #fed7aa',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        <AlertTriangle size={13} /> Action Required
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
-                      {s.phone_number && (
-                        <a
-                          href={`https://wa.me/91${s.phone_number}?text=Hello%20${encodeURIComponent(s.name)},%20our%20hostel%20records%20show%20you%20marked%20attendance%20while%20on%20approved%20leave.%20Please%20meet%20your%20floor%20leader%20or%20admin%20to%20verify%20your%20presence.`}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: '#ecfdf5',
-                            color: '#065f46',
-                            border: '1px solid #a7f3d0',
-                            borderRadius: '8px',
-                            fontWeight: 700,
-                            fontSize: '12px',
-                            textDecoration: 'none',
+                      </td>
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        {st.groupName ? (
+                          <span style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            whiteSpace: 'nowrap'
+                            padding: '3px 10px',
+                            borderRadius: '999px',
+                            backgroundColor: '#eef2ff',
+                            color: '#4f46e5',
+                            border: '1px solid #c7d2fe',
+                            fontSize: '12px',
+                            fontWeight: 700
+                          }}>
+                            <Layers size={11} />
+                            {st.groupName}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '12px' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px', color: '#475569', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                        {st.whatsappNumber || st.phone ? (
+                          <a
+                            href={`tel:${st.whatsappNumber || st.phone}`}
+                            style={{ color: '#0284c7', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
+                          >
+                            <Phone size={13} /> {st.whatsappNumber || st.phone}
+                          </a>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                            {st.dob ? formatDateShort(st.dob) : 'Today'}
+                          </span>
+                          {age && (
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: '999px',
+                              backgroundColor: '#fdf2f8',
+                              color: '#be185d',
+                              border: '1px solid #fbcfe8'
+                            }}>
+                              Turning {age}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        {st.alreadySentToday ? (
+                          <span style={{
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            backgroundColor: '#ecfdf5',
+                            color: '#065f46',
+                            border: '1px solid #a7f3d0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <CheckCircle2 size={13} /> Wish Sent
+                          </span>
+                        ) : (
+                          <span style={{
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            backgroundColor: '#fdf2f8',
+                            color: '#be185d',
+                            border: '1px solid #fbcfe8',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <Cake size={13} /> Ready to Wish
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => openBirthdayWhatsAppModal(st)}
+                          style={{
+                            padding: '7px 14px',
+                            backgroundColor: '#16a34a',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '9px',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(22, 163, 74, 0.28)'
                           }}
                         >
-                          <MessageSquare size={13} /> WhatsApp
-                        </a>
-                      )}
-
-                      <button
-                        onClick={() => setJustifyModal({ 
-                          isOpen: true, 
-                          student: s, 
-                          reason: s.justification_reason || 'Met student in room - verified physical presence and early return from leave.', 
-                          error: undefined 
-                        })}
-                        style={{
-                          padding: '6px 14px',
-                          backgroundColor: s.is_justified ? '#f8fafc' : '#3b82f6',
-                          color: s.is_justified ? '#475569' : '#ffffff',
-                          border: s.is_justified ? '1.5px solid #cbd5e1' : 'none',
-                          borderRadius: '8px',
-                          fontWeight: 700,
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          whiteSpace: 'nowrap',
-                          boxShadow: s.is_justified ? 'none' : '0 2px 6px rgba(59,130,246,0.3)'
-                        }}
-                      >
-                        <CheckCircle2 size={13} /> {s.is_justified ? 'Edit Justification' : 'Justify / Met Student'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredDiscrepancies.length === 0 && (
-                <tr>
-                  <td colSpan={10} style={{ padding: '36px', textAlign: 'center', color: '#10b981', fontWeight: 600 }}>
-                    🎉 No discrepancies found! All students on leave have valid and clean attendance records.
-                  </td>
-                </tr>
+                          <MessageSquare size={14} />
+                          Send WhatsApp
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </HamsCard>
 
-      {/* DASHBOARD JUSTIFICATION POP-UP MODAL */}
-      {justifyModal?.isOpen && createPortal(
-        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setJustifyModal(null); }}>
-          <div className="modal-content-card" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+      {/* SEND BIRTHDAY WHATSAPP POP-UP MODAL (TEMPLATE OR MANUAL MESSAGE) */}
+      {waModal?.isOpen && createPortal(
+        <div
+          className="modal-backdrop"
+          style={{ zIndex: 1200 }}
+          onClick={(e) => { if (e.target === e.currentTarget && !sendingWa) setWaModal(null); }}
+        >
+          <div
+            className="modal-content-card"
+            style={{ maxWidth: '580px', width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div>
-                <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
-                  Verify & Justify Student Presence
-                </h3>
-                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
-                  {justifyModal.student.name} ({justifyModal.student.student_code}) • {justifyModal.student.floor_name || `Floor ${justifyModal.student.floor_id}`} • Room {justifyModal.student.room_number || 'N/A'}
-                </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '11px',
+                  backgroundColor: '#ecfdf5',
+                  color: '#16a34a',
+                  border: '1px solid #bbf7d0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <MessageSquare size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: '0 0 2px 0', fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>
+                    Send Birthday WhatsApp Message
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                    🎂 {waModal.student.name} (ID: {waModal.student.studentCode})
+                    {waModal.student.room && waModal.student.room !== 'N/A' ? ` • Room ${waModal.student.room}` : ''}
+                    {computeTurningAge(waModal.student.dob) ? ` • Turning ${computeTurningAge(waModal.student.dob)}` : ''}
+                  </p>
+                </div>
               </div>
-              <button 
-                onClick={() => setJustifyModal(null)} 
-                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              <button
+                type="button"
+                onClick={() => !sendingWa && setWaModal(null)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* Leave Details Summary Box */}
-            <div style={{
-              padding: '12px 14px',
-              backgroundColor: '#eff6ff',
-              border: '1px solid #bfdbfe',
-              borderRadius: '8px',
-              marginBottom: '16px',
-              fontSize: '13px',
-              color: '#1e3a8a'
-            }}>
-              <div style={{ fontWeight: 700, marginBottom: '4px' }}>
-                🌴 Leave Period: {formatDateShort(justifyModal.student.leave_start)} to {formatDateShort(justifyModal.student.leave_end)}
-                {justifyModal.student.leave_reason && ` ("${justifyModal.student.leave_reason}")`}
+            {/* Recipient Phone Selector */}
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                  Recipient WhatsApp Number
+                </label>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: isWhatsAppConnected ? '#059669' : '#d97706'
+                }}>
+                  {isWhatsAppConnected ? '● Server WhatsApp Connected' : '● Server WhatsApp Disconnected'}
+                </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                <span style={{ fontWeight: 600 }}>Marked on:</span>
-                {(justifyModal.student.marked_dates || []).map((d: string) => (
-                  <span key={d} style={{ padding: '2px 6px', backgroundColor: '#dbeafe', color: '#1d4ed8', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>
-                    {formatDateShort(d)}
-                  </span>
-                ))}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  value={waModal.phone}
+                  onChange={e => setWaModal({ ...waModal, phone: e.target.value, error: undefined })}
+                  placeholder="Enter WhatsApp number..."
+                  style={{
+                    flex: 1,
+                    minWidth: '200px',
+                    padding: '9px 12px',
+                    borderRadius: '9px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    fontWeight: 600
+                  }}
+                />
+                {waModal.student.parentPhone && waModal.student.parentPhone !== waModal.phone && (
+                  <button
+                    type="button"
+                    onClick={() => setWaModal({ ...waModal, phone: waModal.student.parentPhone || '' })}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '9px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#f8fafc',
+                      color: '#334155',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Use Parent ({waModal.student.parentPhone})
+                  </button>
+                )}
               </div>
             </div>
 
-            {justifyModal.error && (
-              <div style={{ 
-                padding: '10px 14px', 
-                backgroundColor: '#fef2f2', 
-                border: '1px solid #fecaca', 
-                borderRadius: '8px', 
-                color: '#b91c1c', 
-                fontSize: '13px', 
+            {/* Mode Switcher: Admin WhatsApp Template vs Manual Message */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '4px', backgroundColor: '#f1f5f9', borderRadius: '10px', marginBottom: '16px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const tpl = waTemplates.find(t => t.id === waModal.selectedTemplateId) || waTemplates[0] || null;
+                  setWaModal({
+                    ...waModal,
+                    mode: 'template',
+                    selectedTemplateId: tpl ? tpl.id : null,
+                    message: tpl ? applyTemplateVariables(tpl.content, waModal.student) : waModal.message,
+                    imageUrl: tpl?.image_url || null,
+                    error: undefined
+                  });
+                }}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  backgroundColor: waModal.mode === 'template' ? '#ffffff' : 'transparent',
+                  color: waModal.mode === 'template' ? '#16a34a' : '#64748b',
+                  boxShadow: waModal.mode === 'template' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                <FileText size={14} />
+                Select WhatsApp Template
+              </button>
+              <button
+                type="button"
+                onClick={() => setWaModal({ ...waModal, mode: 'manual', imageUrl: null, error: undefined })}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  backgroundColor: waModal.mode === 'manual' ? '#ffffff' : 'transparent',
+                  color: waModal.mode === 'manual' ? '#4f46e5' : '#64748b',
+                  boxShadow: waModal.mode === 'manual' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                <MessageSquare size={14} />
+                Write Message Manually
+              </button>
+            </div>
+
+            {/* Template Picker (when mode === 'template') */}
+            {waModal.mode === 'template' && (
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                  Choose Admin-Created WhatsApp Template ({waTemplates.length} available)
+                </label>
+                {loadingTemplates ? (
+                  <div style={{ padding: '12px', fontSize: '12px', color: '#64748b', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                    Loading templates...
+                  </div>
+                ) : waTemplates.length === 0 ? (
+                  <div style={{ padding: '12px', fontSize: '12px', color: '#b45309', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px solid #fde68a' }}>
+                    No WhatsApp templates created yet. Switch to <strong>Write Message Manually</strong> or create templates under WhatsApp → Templates.
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={waModal.selectedTemplateId ?? ''}
+                      onChange={e => {
+                        const idNum = Number(e.target.value);
+                        if (idNum) handleSelectTemplateInModal(idNum);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1.5px solid #cbd5e1',
+                        backgroundColor: '#ffffff',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: '#0f172a',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {waTemplates.map(tpl => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.name} ({tpl.category || 'general'}){tpl.image_url ? ' 🖼️' : ''}
+                        </option>
+                      ))}
+                    </select>
+
+                    {waModal.imageUrl && (
+                      <div style={{
+                        marginTop: '10px',
+                        padding: '8px 10px',
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '12px',
+                        color: '#475569'
+                      }}>
+                        <ImageIcon size={15} color="#4f46e5" />
+                        <span>Template includes an attached image (will be sent automatically with the message).</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Message Box (Editable Preview for Template OR Manual Editor) */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                  {waModal.mode === 'template' ? 'Message Preview (Auto-filled for this student — editable)' : 'Write Custom WhatsApp Message'}
+                </label>
+                {waModal.mode === 'manual' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setWaModal({
+                        ...waModal,
+                        message: `🎂 Happy Birthday ${waModal.student.name}! Wishing you a joyful day and a bright, successful year ahead. — AVD Hostel`
+                      })
+                    }
+                    style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Insert Birthday Greeting
+                  </button>
+                )}
+              </div>
+              <textarea
+                rows={5}
+                value={waModal.message}
+                onChange={e => setWaModal({ ...waModal, message: e.target.value, error: undefined })}
+                placeholder="Type your birthday WhatsApp message here..."
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: '1.5px solid #cbd5e1',
+                  fontFamily: 'inherit',
+                  fontSize: '13px',
+                  lineHeight: 1.5,
+                  resize: 'vertical',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Error / Success Alerts */}
+            {waModal.error && (
+              <div style={{
+                padding: '10px 14px',
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                color: '#b91c1c',
+                fontSize: '13px',
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
@@ -1159,70 +1486,97 @@ export const DashboardOverview: React.FC = () => {
                 marginBottom: '14px'
               }}>
                 <AlertCircle size={16} />
-                {justifyModal.error}
+                <span>{waModal.error}</span>
               </div>
             )}
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                Student Meeting & Verification Notes <span style={{ color: '#ef4444' }}>* (Required)</span>
-              </label>
-              <textarea
-                rows={4}
-                value={justifyModal.reason}
-                onChange={e => setJustifyModal({ ...justifyModal, reason: e.target.value, error: undefined })}
-                placeholder="Enter meeting details (e.g. Met student in hostel room 302, student returned 2 days early from home leave, physically verified presence)..."
-                style={{ 
-                  width: '100%', 
-                  padding: '12px 14px', 
-                  borderRadius: '8px', 
-                  border: justifyModal.error ? '2px solid #ef4444' : '1px solid #cbd5e1', 
-                  fontFamily: 'inherit',
-                  fontSize: '13px',
-                  resize: 'vertical'
-                }}
-              />
-            </div>
+            {waModal.success && (
+              <div style={{
+                padding: '10px 14px',
+                backgroundColor: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                borderRadius: '8px',
+                color: '#065f46',
+                fontSize: '13px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '14px'
+              }}>
+                <CheckCircle2 size={16} />
+                <span>{waModal.success}</span>
+              </div>
+            )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setJustifyModal(null)}
-                style={{ 
-                  padding: '10px 18px', 
-                  background: '#f1f5f9', 
-                  border: '1px solid #cbd5e1', 
-                  borderRadius: '8px', 
-                  cursor: 'pointer', 
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  color: '#475569'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={submittingJustify}
-                onClick={handleSaveJustification}
-                style={{ 
-                  padding: '10px 20px', 
-                  background: '#10b981', 
-                  color: '#ffffff', 
-                  border: 'none', 
-                  borderRadius: '8px', 
-                  cursor: submittingJustify ? 'not-allowed' : 'pointer', 
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 6px rgba(16,185,129,0.3)'
-                }}
-              >
-                <CheckCircle2 size={15} />
-                {submittingJustify ? 'Saving...' : 'Confirm Met & Justify'}
-              </button>
+            {/* Footer Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              {waModal.phone.trim() ? (
+                <a
+                  href={`https://wa.me/${waModal.phone.replace(/\D/g, '').length === 10 ? '91' + waModal.phone.replace(/\D/g, '') : waModal.phone.replace(/\D/g, '')}?text=${encodeURIComponent(waModal.message)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    padding: '9px 14px',
+                    borderRadius: '9px',
+                    border: '1px solid #bbf7d0',
+                    backgroundColor: '#f0fdf4',
+                    color: '#15803d',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  <ExternalLink size={13} />
+                  Open in WhatsApp Web
+                </a>
+              ) : <div />}
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  disabled={sendingWa}
+                  onClick={() => setWaModal(null)}
+                  style={{
+                    padding: '10px 18px',
+                    background: '#f1f5f9',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '9px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    color: '#475569'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={sendingWa || !waModal.message.trim() || !waModal.phone.trim()}
+                  onClick={handleSendBirthdayWhatsApp}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '9px',
+                    cursor: sendingWa ? 'not-allowed' : 'pointer',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    opacity: sendingWa || !waModal.message.trim() || !waModal.phone.trim() ? 0.65 : 1,
+                    boxShadow: '0 2px 6px rgba(22, 163, 74, 0.3)'
+                  }}
+                >
+                  <Send size={14} />
+                  {sendingWa ? 'Sending...' : 'Send WhatsApp'}
+                </button>
+              </div>
             </div>
           </div>
         </div>,

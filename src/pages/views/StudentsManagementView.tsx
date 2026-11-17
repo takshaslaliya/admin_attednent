@@ -1,20 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Search, 
-  UserPlus, 
-  RefreshCw, 
-  ChevronDown, 
-  CheckCircle2, 
-  AlertCircle, 
-  Phone, 
-  Edit2, 
-  Trash2, 
-  Info, 
-  X, 
-  Users, 
-  Tag, 
-  Plus, 
-  Sparkles, 
+import {
+  Search,
+  UserPlus,
+  RefreshCw,
+  ChevronDown,
+  CheckCircle2,
+  AlertCircle,
+  Phone,
+  Edit2,
+  Trash2,
+  Info,
+  X,
+  Users,
+  Tag,
+  Plus,
+  Sparkles,
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
@@ -61,13 +61,13 @@ export const StudentsManagementView: React.FC = () => {
   const [defaultFilter, setDefaultFilter] = useState<string>('All');
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<string>('name-asc');
-  
+
   const [mobileModal, setMobileModal] = useState<{ isOpen: boolean, studentId: string, currentMobile: string } | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addStudentId, setAddStudentId] = useState('');
   const [addingStudent, setAddingStudent] = useState(false);
 
-  const [assignModal, setAssignModal] = useState<{isOpen: boolean, studentId: string, currentFloor: string, currentRoom: string} | null>(null);
+  const [assignModal, setAssignModal] = useState<{ isOpen: boolean, studentId: string, currentFloor: string, currentRoom: string } | null>(null);
   const [detailsModal, setDetailsModal] = useState<any | null>(null);
 
   // Floor Leader Modal triggered on Student Double Click
@@ -164,7 +164,7 @@ export const StudentsManagementView: React.FC = () => {
     setLeaderFormName(student.name || '');
     setLeaderFormUsername(cleanCode || `leader_${student.student_id || student.id}`);
     setLeaderFormPhone(student.assigned_mobile || student.phone_number || '');
-    
+
     // Auto-generate password
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
     let pwd = '';
@@ -251,7 +251,7 @@ export const StudentsManagementView: React.FC = () => {
   const toggleDefaultAttendance = async (studentId: string, currentVal: boolean) => {
     const isConfirmed = await confirm({
       title: 'Change Auto-Present Setting',
-      message: !currentVal 
+      message: !currentVal
         ? 'Enable Auto-Present for this student? They will be automatically marked PRESENT whenever attendance sessions start.'
         : 'Disable Auto-Present for this student? They will need to verify attendance manually via Bluetooth.',
       warningNote: 'Ensure this aligns with hostel attendance rules.',
@@ -592,8 +592,8 @@ export const StudentsManagementView: React.FC = () => {
     }
 
     // Fallback directly to student object from state if API is slow or offline
-    const matched = typeof studentOrCode === 'object' && studentOrCode !== null 
-      ? studentOrCode 
+    const matched = typeof studentOrCode === 'object' && studentOrCode !== null
+      ? studentOrCode
       : students.find(s => s.student_code === studentCode || String(s.id) === String(studentCode) || String(s.student_id) === String(studentCode));
 
     if (matched) {
@@ -623,7 +623,7 @@ export const StudentsManagementView: React.FC = () => {
     const idMatch = String(s.student_code || '').toLowerCase().includes(searchQuery.toLowerCase());
     const isAssigned = s.floor_id != null && s.floor_id !== '' && Number(s.floor_id) > 0;
     const isAlumni = s.is_active === 0 || s.is_active === false || s.is_active === '0';
-    
+
     let assignMatch = true;
     if (assignmentFilter === 'Active') assignMatch = !isAlumni;
     else if (assignmentFilter === 'Alumni') assignMatch = isAlumni;
@@ -1050,9 +1050,9 @@ export const StudentsManagementView: React.FC = () => {
             const isAssigned = student.floor_id != null;
             const { cardStyle, avatarStyle } = getStudentCardTagStyles(student.tags || []);
             return (
-              <HamsCard 
-                key={student.student_id || student.id} 
-                padding="18px" 
+              <HamsCard
+                key={student.student_id || student.id}
+                padding="18px"
                 style={{ ...cardStyle, cursor: 'pointer' }}
                 onDoubleClick={() => showStudentDetails(student)}
               >
@@ -1215,18 +1215,18 @@ export const StudentsManagementView: React.FC = () => {
 
                   <button
                     onClick={() => openStudentTagModal(student)}
-                    style={{ 
-                      padding: '6px 10px', 
-                      fontSize: '12px', 
-                      fontWeight: 600, 
-                      border: '1px solid #cbd5e1', 
-                      borderRadius: '6px', 
-                      backgroundColor: (student.tags || []).length > 0 ? '#eff6ff' : '#ffffff', 
-                      color: (student.tags || []).length > 0 ? '#1d4ed8' : '#334155', 
-                      cursor: 'pointer', 
-                      display: 'inline-flex', 
-                      alignItems: 'center', 
-                      gap: '4px' 
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '6px',
+                      backgroundColor: (student.tags || []).length > 0 ? '#eff6ff' : '#ffffff',
+                      color: (student.tags || []).length > 0 ? '#1d4ed8' : '#334155',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
                     }}
                   >
                     <Tag size={13} /> Tags ({(student.tags || []).length}/3)
@@ -2601,7 +2601,7 @@ export const StudentsManagementView: React.FC = () => {
                         key={fl}
                         type="button"
                         onClick={() => {
-                          setLeaderFormFloors(prev => 
+                          setLeaderFormFloors(prev =>
                             prev.includes(fl) ? prev.filter(f => f !== fl) : [...prev, fl].sort((a, b) => a - b)
                           );
                         }}
