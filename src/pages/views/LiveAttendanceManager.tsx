@@ -340,15 +340,49 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         apiClient.get('/admin/sessions')
       ]);
 
+      const allSessions = allRes.data?.success && Array.isArray(allRes.data.data) ? allRes.data.data : [];
+      if (allSessions.length > 0) {
+        setAvailableSessions(allSessions);
+      }
+      const match = allSessions.find((s: any) => s.session_key?.toLowerCase() === sessionKey?.toLowerCase());
+
+      if (match) {
+        setSessionName(match.session_name);
+        if (match.icon_name) {
+          setIconName(match.icon_name);
+        }
+        if (match.is_for_all_students !== undefined) {
+          setIsForAllStudents(Boolean(match.is_for_all_students));
+        }
+      } else {
+        setSessionName(sessionKey.charAt(0).toUpperCase() + sessionKey.slice(1) + ' Attendance');
+      }
+
       if (res.data.success && res.data.data) {
         const d = res.data.data;
-        setStartTime((d.start_time || '21:00').slice(0, 5));
-        setEndTime((d.end_time || '21:30').slice(0, 5));
-        setLateTime(d.late_time ? d.late_time.slice(0, 5) : null);
-        setHasMultipleAttendance(Boolean(d.has_multiple_attendance));
-        if (d.phase2_start_time) setPhase2StartTime(d.phase2_start_time.slice(0, 5));
-        if (d.phase2_end_time) setPhase2EndTime(d.phase2_end_time.slice(0, 5));
-        setPhase2LateTime(d.phase2_late_time ? d.phase2_late_time.slice(0, 5) : null);
+        setStartTime((d.start_time || match?.start_time || '21:00').slice(0, 5));
+        setEndTime((d.end_time || match?.end_time || '21:30').slice(0, 5));
+        const lTime = d.late_time !== undefined ? d.late_time : match?.late_time;
+        setLateTime(lTime ? String(lTime).slice(0, 5) : null);
+
+        // Multiple Attendance: Check BOTH schedule data AND session metadata
+        const isMulti = Boolean(
+          d.has_multiple_attendance !== undefined && d.has_multiple_attendance !== null
+            ? (d.has_multiple_attendance && d.has_multiple_attendance !== '0' && d.has_multiple_attendance !== 0)
+            : (match?.has_multiple_attendance && match?.has_multiple_attendance !== '0' && match?.has_multiple_attendance !== 0)
+        );
+
+        setHasMultipleAttendance(isMulti);
+        setIsMultipleAttendance(isMulti);
+
+        const p2s = d.phase2_start_time || match?.phase2_start_time || '07:25';
+        const p2e = d.phase2_end_time || match?.phase2_end_time || '07:30';
+        const p2l = d.phase2_late_time !== undefined ? d.phase2_late_time : (match?.phase2_late_time !== undefined ? match?.phase2_late_time : null);
+
+        setPhase2StartTime(String(p2s).slice(0, 5));
+        setPhase2EndTime(String(p2e).slice(0, 5));
+        setPhase2LateTime(p2l ? String(p2l).slice(0, 5) : null);
+
         setLinkedSessionKey(d.linked_session_key || null);
         const sMsg = d.auto_message_student || d.auto_message || '';
         const pMsg = d.auto_message_parent || '';
@@ -369,10 +403,10 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             lateTime: (s.lateTime !== undefined ? s.lateTime : (s.late_time !== undefined ? s.late_time : d.late_time))
               ? String(s.lateTime || s.late_time || d.late_time).slice(0, 5)
               : null,
-            phase2StartTime: (s.phase2StartTime || s.phase2_start_time || d.phase2_start_time || '07:25').slice(0, 5),
-            phase2EndTime: (s.phase2EndTime || s.phase2_end_time || d.phase2_end_time || '07:30').slice(0, 5),
-            phase2LateTime: (s.phase2LateTime !== undefined ? s.phase2LateTime : (s.phase2_late_time !== undefined ? s.phase2_late_time : d.phase2_late_time))
-              ? String(s.phase2LateTime || s.phase2_late_time || d.phase2_late_time).slice(0, 5)
+            phase2StartTime: (s.phase2StartTime || s.phase2_start_time || p2s).slice(0, 5),
+            phase2EndTime: (s.phase2EndTime || s.phase2_end_time || p2e).slice(0, 5),
+            phase2LateTime: (s.phase2LateTime !== undefined ? s.phase2LateTime : (s.phase2_late_time !== undefined ? s.phase2_late_time : p2l))
+              ? String(s.phase2LateTime || s.phase2_late_time || p2l).slice(0, 5)
               : null
           }));
           setDaySchedules(loadedSlots);
@@ -384,9 +418,9 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
               startTime: (d.start_time || '21:00').slice(0, 5),
               endTime: (d.end_time || '21:30').slice(0, 5),
               lateTime: d.late_time ? d.late_time.slice(0, 5) : null,
-              phase2StartTime: d.phase2_start_time ? d.phase2_start_time.slice(0, 5) : '07:25',
-              phase2EndTime: d.phase2_end_time ? d.phase2_end_time.slice(0, 5) : '07:30',
-              phase2LateTime: d.phase2_late_time ? d.phase2_late_time.slice(0, 5) : null
+              phase2StartTime: String(p2s).slice(0, 5),
+              phase2EndTime: String(p2e).slice(0, 5),
+              phase2LateTime: p2l ? String(p2l).slice(0, 5) : null
             }
           ]);
         }
@@ -399,21 +433,6 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             leave: { ...DEFAULT_ALERTS_CONFIG.leave, ...(cfg.leave || {}) },
             present: { ...DEFAULT_ALERTS_CONFIG.present, ...(cfg.present || {}) }
           });
-        }
-      }
-      if (allRes.data.success) {
-        setAvailableSessions(allRes.data.data);
-        const match = allRes.data.data.find((s: any) => s.session_key === sessionKey);
-        if (match) {
-          setSessionName(match.session_name);
-          if (match.icon_name) {
-            setIconName(match.icon_name);
-          }
-          if (match.is_for_all_students !== undefined) {
-            setIsForAllStudents(Boolean(match.is_for_all_students));
-          }
-        } else {
-          setSessionName(sessionKey.charAt(0).toUpperCase() + sessionKey.slice(1) + ' Attendance');
         }
       }
     } catch (e) {
@@ -569,6 +588,19 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
       }
     }
 
+    const daySchedulesToSave = hasMultipleAttendance
+      ? daySchedules.map(slot => ({
+          ...slot,
+          hasMultipleAttendance: true,
+          phase2StartTime: slot.phase2StartTime || p2StartTimeVal,
+          phase2EndTime: slot.phase2EndTime || p2EndTimeVal,
+          phase2LateTime: slot.phase2LateTime !== undefined ? slot.phase2LateTime : p2LateTimeVal
+        }))
+      : daySchedules.map(slot => ({
+          ...slot,
+          hasMultipleAttendance: false
+        }));
+
     setSaving(true);
     try {
       const res = await apiClient.put('/attendance/schedule', {
@@ -580,7 +612,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         phase2StartTime: p2StartTimeVal,
         phase2EndTime: p2EndTimeVal,
         phase2LateTime: p2LateTimeVal,
-        daySchedules: daySchedules,
+        daySchedules: daySchedulesToSave,
         linkedSessionKey: linkedSessionKey,
         autoMessage: alertsConfig.absent.student_message,
         autoMessageStudent: alertsConfig.absent.student_message,
@@ -1172,7 +1204,7 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             session_name: sessionName,
             icon_name: iconName || 'moon',
             is_for_all_students: isForAllStudents,
-            has_multiple_attendance: isMultipleAttendance,
+            has_multiple_attendance: hasMultipleAttendance || isMultipleAttendance,
             start_time: startTime,
             end_time: endTime,
             late_time: lateTime,
@@ -1184,13 +1216,27 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
             if (updated.session_name) setSessionName(updated.session_name);
             if (updated.icon_name) setIconName(updated.icon_name);
             if (updated.is_for_all_students !== undefined) setIsForAllStudents(Boolean(updated.is_for_all_students));
-            if (updated.has_multiple_attendance !== undefined) setIsMultipleAttendance(Boolean(updated.has_multiple_attendance));
+            if (updated.has_multiple_attendance !== undefined) {
+              const multi = Boolean(updated.has_multiple_attendance);
+              setHasMultipleAttendance(multi);
+              setIsMultipleAttendance(multi);
+            }
             if (updated.start_time) setStartTime(updated.start_time.slice(0, 5));
             if (updated.end_time) setEndTime(updated.end_time.slice(0, 5));
             if (updated.late_time !== undefined) setLateTime(updated.late_time ? updated.late_time.slice(0, 5) : null);
             if (updated.phase2_start_time) setPhase2StartTime(updated.phase2_start_time.slice(0, 5));
             if (updated.phase2_end_time) setPhase2EndTime(updated.phase2_end_time.slice(0, 5));
             if (updated.phase2_late_time !== undefined) setPhase2LateTime(updated.phase2_late_time ? updated.phase2_late_time.slice(0, 5) : null);
+            setDaySchedules(prev => prev.map(slot => ({
+              ...slot,
+              startTime: updated.start_time ? updated.start_time.slice(0, 5) : slot.startTime,
+              endTime: updated.end_time ? updated.end_time.slice(0, 5) : slot.endTime,
+              lateTime: updated.late_time !== undefined ? (updated.late_time ? updated.late_time.slice(0, 5) : null) : slot.lateTime,
+              hasMultipleAttendance: updated.has_multiple_attendance !== undefined ? Boolean(updated.has_multiple_attendance) : slot.hasMultipleAttendance,
+              phase2StartTime: updated.phase2_start_time ? updated.phase2_start_time.slice(0, 5) : slot.phase2StartTime,
+              phase2EndTime: updated.phase2_end_time ? updated.phase2_end_time.slice(0, 5) : slot.phase2EndTime,
+              phase2LateTime: updated.phase2_late_time !== undefined ? (updated.phase2_late_time ? updated.phase2_late_time.slice(0, 5) : null) : slot.phase2LateTime
+            })));
             fetchSchedule(true);
           }}
         />
