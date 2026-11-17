@@ -7,6 +7,7 @@ import { DashboardOverview } from './views/DashboardOverview';
 import { AttendanceReportsView } from './views/AttendanceReportsView';
 import { OneDayAttendanceView } from './views/OneDayAttendanceView';
 import { StudentsManagementView } from './views/StudentsManagementView';
+import { GroupsManagementView } from './views/GroupsManagementView';
 import { LeadersManagementView } from './views/LeadersManagementView';
 import { WhatsAppMessagingView } from './views/WhatsAppMessagingView';
 import { LiveAttendanceManager } from './views/LiveAttendanceManager';
@@ -74,6 +75,9 @@ export const AdminLayout: React.FC = () => {
     }
     if (p === '/students') {
       return { title: 'Student Management', subtitle: 'Manage active students, floor & room assignments' };
+    }
+    if (p === '/groups' || p === '/student-groups') {
+      return { title: 'Student Groups Management', subtitle: 'Create multiple groups, link students, and auto-sync API groups' };
     }
     if (p === '/leaders') {
       return { title: 'User Credentials Management', subtitle: 'Create, assign multiple floors, and manage user login credentials' };
@@ -145,6 +149,8 @@ export const AdminLayout: React.FC = () => {
             <Route path="/attendance-reports" element={<AttendanceReportsView />} />
             <Route path="/one-day-attendance" element={<OneDayAttendanceView />} />
             <Route path="/students" element={<StudentsManagementView />} />
+            <Route path="/groups" element={<GroupsManagementView />} />
+            <Route path="/student-groups" element={<GroupsManagementView />} />
             <Route path="/leaders" element={!isLeader ? <LeadersManagementView /> : <Navigate to="/" replace />} />
             <Route path="/session-viewers" element={!isLeader ? <SessionViewerCredentialsView /> : <Navigate to="/" replace />} />
             <Route path="/strings" element={!isLeader ? <FloorStringsView /> : <Navigate to="/" replace />} />

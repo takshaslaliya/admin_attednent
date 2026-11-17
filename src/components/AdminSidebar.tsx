@@ -97,9 +97,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const isAttendanceActive = isAttendance || isOneDayAttendance || isLeaves;
 
   const isStudents = pathname === '/students';
+  const isGroups = pathname === '/groups' || pathname === '/student-groups';
   const isLeaders = pathname === '/leaders';
   const isSessionViewers = pathname === '/session-viewers';
-  const isStudentsActive = isStudents || isLeaders || isSessionViewers;
+  const isStudentsActive = isStudents || isGroups || isLeaders || isSessionViewers;
 
   const isMessages = pathname === '/messages';
   const isTemplates = pathname === '/templates' || pathname === '/whatsapp-templates';
@@ -257,6 +258,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <span className="subitem-bullet"></span>
                   <Users size={15} className="subitem-icon" />
                   <span>Students Directory</span>
+                </button>
+
+                <button
+                  className={`nav-subitem-btn ${isGroups ? 'active' : ''}`}
+                  onClick={() => handleNavClick('/groups')}
+                >
+                  <span className="subitem-bullet"></span>
+                  <Layers size={15} className="subitem-icon" style={{ color: '#4f46e5' }} />
+                  <span>Student Groups</span>
                 </button>
 
                 {!isLeader && (

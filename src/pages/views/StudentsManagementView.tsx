@@ -25,7 +25,14 @@ import {
   Eye,
   EyeOff,
   Check,
-  RotateCcw
+  RotateCcw,
+  MapPin,
+  Mail,
+  Briefcase,
+  CreditCard,
+  Heart,
+  Layers,
+  User
 } from 'lucide-react';
 import axios from 'axios';
 import apiClient from '../../services/apiClient';
@@ -1127,6 +1134,52 @@ export const StudentsManagementView: React.FC = () => {
                   <span>Parent: <strong>{student.parent_phone || student.father_phone || student.mother_phone || 'None'}</strong></span>
                 </div>
 
+                {/* Linked Student Groups */}
+                {((student.groups || []).length > 0 || student.group_name) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '8px' }}>
+                    {(student.groups || []).length > 0 ? (
+                      (student.groups || []).map((g: any) => (
+                        <span
+                          key={g.id}
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            backgroundColor: `${g.color || '#4f46e5'}15`,
+                            color: g.color || '#4f46e5',
+                            border: `1px solid ${g.color || '#4f46e5'}35`,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Layers size={11} />
+                          {g.name}
+                        </span>
+                      ))
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          backgroundColor: '#eef2ff',
+                          color: '#4f46e5',
+                          border: '1px solid #c7d2fe',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Layers size={11} />
+                        {student.group_name}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* Assigned Tags List */}
                 {(student.tags || []).length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '12px' }}>
@@ -1742,13 +1795,26 @@ export const StudentsManagementView: React.FC = () => {
                   <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
                     {detailsModal.name || `${detailsModal.firstName || ''} ${detailsModal.lastName || ''}`.trim()}
                   </h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 700, color: '#4f46e5', backgroundColor: '#eef2ff', padding: '2px 8px', borderRadius: '6px' }}>
                       ID: {detailsModal.bankCode}
                     </span>
                     <span style={{ fontSize: '12px', color: '#64748b' }}>
                       {detailsModal.floor_name || (detailsModal.floor_id ? `Floor ${detailsModal.floor_id}` : 'Unassigned')} • Room {detailsModal.room || detailsModal.room_number || 'N/A'}
                     </span>
+                    {detailsModal.status && (
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        textTransform: 'capitalize',
+                        backgroundColor: String(detailsModal.status).toLowerCase().includes('cancel') || String(detailsModal.status).toLowerCase() === 'left' ? '#fef2f2' : '#ecfdf5',
+                        color: String(detailsModal.status).toLowerCase().includes('cancel') || String(detailsModal.status).toLowerCase() === 'left' ? '#dc2626' : '#059669'
+                      }}>
+                        {detailsModal.status}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1760,49 +1826,229 @@ export const StudentsManagementView: React.FC = () => {
               </button>
             </div>
 
-            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Basic Contact & Profile Grid */}
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* Personal & Contact Details */}
               <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-                gap: '12px',
-                padding: '14px',
+                padding: '16px',
                 backgroundColor: '#f8fafc',
-                borderRadius: '12px',
+                borderRadius: '14px',
                 border: '1px solid #e2e8f0',
                 fontSize: '13px'
               }}>
-                <div>
-                  <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>MOBILE NUMBER</span>
-                  <strong style={{ color: '#0f172a' }}>{detailsModal.mobileNumber || detailsModal.phone || 'N/A'}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <User size={15} color="#4f46e5" />
+                  <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Personal &amp; Contact Details
+                  </h4>
                 </div>
-                {detailsModal.parentPhone && detailsModal.parentPhone !== 'N/A' && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))',
+                  gap: '12px'
+                }}>
                   <div>
-                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>PARENT PHONE</span>
-                    <strong style={{ color: '#0f172a' }}>{detailsModal.parentPhone}</strong>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>FIRST NAME</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.firstName || 'N/A'}</strong>
                   </div>
-                )}
-                <div>
-                  <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>STUDENT GROUP</span>
-                  <strong style={{ color: '#0f172a' }}>{detailsModal.group || 'Hostel Student'}</strong>
-                </div>
-                {detailsModal.emailId && detailsModal.emailId !== 'N/A' && (
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>MIDDLE NAME</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.middleName || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>LAST NAME</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.lastName || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>PHONE / MOBILE</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.mobileNumber || detailsModal.phone || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>WHATSAPP NUMBER</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.whatsappNumber || detailsModal.whatsAppNumber || 'N/A'}</strong>
+                  </div>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>EMAIL</span>
-                    <strong style={{ color: '#0f172a' }}>{detailsModal.emailId}</strong>
+                    <strong style={{ color: '#0f172a', wordBreak: 'break-all' }}>{detailsModal.email || (detailsModal.emailId !== 'N/A' ? detailsModal.emailId : 'N/A')}</strong>
                   </div>
-                )}
-                {detailsModal.city && detailsModal.city !== 'N/A' && (
                   <div>
-                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>CITY / STATE</span>
-                    <strong style={{ color: '#0f172a' }}>{detailsModal.city}</strong>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>DATE OF BIRTH</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.dob || detailsModal.dateOfBirth || 'N/A'}</strong>
                   </div>
-                )}
-                <div>
-                  <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>AUTO-ATTENDANCE</span>
-                  <strong style={{ color: detailsModal.is_default_present ? '#059669' : '#64748b' }}>
-                    {detailsModal.is_default_present ? '✅ Default Present ON' : 'Standard (Manual/Scan)'}
-                  </strong>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>AADHAR NUMBER</span>
+                    <strong style={{ color: '#0f172a', fontFamily: 'monospace', fontSize: '13px' }}>{detailsModal.aadhar || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>ADMISSION STATUS</span>
+                    <strong style={{ color: '#0f172a', textTransform: 'capitalize' }}>{detailsModal.studentStatus || detailsModal.status || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>AUTO-ATTENDANCE</span>
+                    <strong style={{ color: detailsModal.is_default_present ? '#059669' : '#64748b' }}>
+                      {detailsModal.is_default_present ? '✅ Default Present ON' : 'Standard (Manual/Scan)'}
+                    </strong>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>STUDENT GROUP(S)</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                      {Array.isArray(detailsModal.groups) && detailsModal.groups.length > 0 ? (
+                        detailsModal.groups.map((grp: any) => (
+                          <span
+                            key={grp.id}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '3px 10px',
+                              borderRadius: '999px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              backgroundColor: `${grp.color || '#4f46e5'}18`,
+                              color: grp.color || '#4f46e5',
+                              border: `1px solid ${grp.color || '#4f46e5'}40`
+                            }}
+                          >
+                            <Layers size={12} />
+                            {grp.name}
+                            {grp.source === 'api' && (
+                              <span style={{ fontSize: '10px', opacity: 0.75 }}>(API)</span>
+                            )}
+                          </span>
+                        ))
+                      ) : (
+                        <strong style={{ color: '#0f172a' }}>{detailsModal.groupName || detailsModal.group || 'Not Assigned'}</strong>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Father & Mother / Family Details */}
+              <div style={{
+                border: '1px solid #e2e8f0',
+                borderRadius: '14px',
+                padding: '16px',
+                backgroundColor: '#ffffff',
+                fontSize: '13px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Users size={15} color="#0284c7" />
+                    <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Parents &amp; Family Details
+                    </h4>
+                  </div>
+                  {detailsModal.anniversary && (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: '#be185d',
+                      backgroundColor: '#fdf2f8',
+                      padding: '3px 10px',
+                      borderRadius: '999px',
+                      border: '1px solid #fbcfe8'
+                    }}>
+                      <Heart size={12} />
+                      Anniversary: {detailsModal.anniversary}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                  {/* Father Card */}
+                  <div style={{ padding: '12px 14px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#0369a1', marginBottom: '8px', textTransform: 'uppercase' }}>
+                      Father Details
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, display: 'block' }}>FULL NAME</span>
+                        <strong style={{ color: '#0f172a' }}>
+                          {detailsModal.fatherName || [detailsModal.fatherFirstName, detailsModal.fatherMiddleName, detailsModal.fatherLastName].filter(Boolean).join(' ') || 'N/A'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, display: 'block' }}>PHONE</span>
+                        <strong style={{ color: '#0f172a' }}>{detailsModal.fatherPhone || 'N/A'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, display: 'block' }}>DATE OF BIRTH</span>
+                        <strong style={{ color: '#0f172a' }}>{detailsModal.fatherDob || 'N/A'}</strong>
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, display: 'block' }}>BUSINESS / OCCUPATION</span>
+                        <strong style={{ color: '#0f172a' }}>{detailsModal.fatherBusiness || 'N/A'}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mother Card */}
+                  <div style={{ padding: '12px 14px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#9333ea', marginBottom: '8px', textTransform: 'uppercase' }}>
+                      Mother Details
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, display: 'block' }}>FULL NAME</span>
+                        <strong style={{ color: '#0f172a' }}>
+                          {detailsModal.motherName || [detailsModal.motherFirstName, detailsModal.motherMiddleName, detailsModal.motherLastName].filter(Boolean).join(' ') || 'N/A'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, display: 'block' }}>PHONE</span>
+                        <strong style={{ color: '#0f172a' }}>{detailsModal.motherPhone || 'N/A'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, display: 'block' }}>DATE OF BIRTH</span>
+                        <strong style={{ color: '#0f172a' }}>{detailsModal.motherDob || 'N/A'}</strong>
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <span style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, display: 'block' }}>BUSINESS / OCCUPATION</span>
+                        <strong style={{ color: '#0f172a' }}>{detailsModal.motherBusiness || 'N/A'}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address & Location Details */}
+              <div style={{
+                border: '1px solid #e2e8f0',
+                borderRadius: '14px',
+                padding: '16px',
+                backgroundColor: '#ffffff',
+                fontSize: '13px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <MapPin size={15} color="#059669" />
+                  <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Address &amp; Location
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>FULL ADDRESS</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.address || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>CITY / VILLAGE</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.city || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>DISTRICT</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.district || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>STATE</span>
+                    <strong style={{ color: '#0f172a' }}>{detailsModal.state || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, display: 'block' }}>PIN CODE</span>
+                    <strong style={{ color: '#0f172a', fontFamily: 'monospace' }}>{detailsModal.pinCode || 'N/A'}</strong>
+                  </div>
                 </div>
               </div>
 
