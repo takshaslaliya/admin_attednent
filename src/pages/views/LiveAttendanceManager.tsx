@@ -590,16 +590,16 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
 
     const daySchedulesToSave = hasMultipleAttendance
       ? daySchedules.map(slot => ({
-          ...slot,
-          hasMultipleAttendance: true,
-          phase2StartTime: slot.phase2StartTime || p2StartTimeVal,
-          phase2EndTime: slot.phase2EndTime || p2EndTimeVal,
-          phase2LateTime: slot.phase2LateTime !== undefined ? slot.phase2LateTime : p2LateTimeVal
-        }))
+        ...slot,
+        hasMultipleAttendance: true,
+        phase2StartTime: slot.phase2StartTime || p2StartTimeVal,
+        phase2EndTime: slot.phase2EndTime || p2EndTimeVal,
+        phase2LateTime: slot.phase2LateTime !== undefined ? slot.phase2LateTime : p2LateTimeVal
+      }))
       : daySchedules.map(slot => ({
-          ...slot,
-          hasMultipleAttendance: false
-        }));
+        ...slot,
+        hasMultipleAttendance: false
+      }));
 
     setSaving(true);
     try {
