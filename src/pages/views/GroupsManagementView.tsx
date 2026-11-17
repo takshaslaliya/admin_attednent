@@ -853,7 +853,6 @@ export const GroupsManagementView: React.FC = () => {
                         <th style={{ padding: '10px 12px' }}>Student</th>
                         <th style={{ padding: '10px 12px' }}>Room / Floor</th>
                         <th style={{ padding: '10px 12px' }}>Phone</th>
-                        <th style={{ padding: '10px 12px' }}>Link Source</th>
                         {!isLeader && <th style={{ padding: '10px 16px', textAlign: 'right' }}>Action</th>}
                       </tr>
                     </thead>
@@ -897,18 +896,6 @@ export const GroupsManagementView: React.FC = () => {
                               <Phone size={12} color="#64748b" />
                               <span>{m.phone_number || 'N/A'}</span>
                             </div>
-                          </td>
-                          <td style={{ padding: '10px 12px' }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '999px',
-                              backgroundColor: m.source === 'api' ? '#eff6ff' : '#f3e8ff',
-                              color: m.source === 'api' ? '#2563eb' : '#7e22ce'
-                            }}>
-                              {m.source === 'api' ? 'API Default' : 'Manual'}
-                            </span>
                           </td>
                           {!isLeader && (
                             <td style={{ padding: '10px 16px', textAlign: 'right' }}>
