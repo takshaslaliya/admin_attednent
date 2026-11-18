@@ -1910,9 +1910,6 @@ export const StudentsManagementView: React.FC = () => {
                           >
                             <Layers size={12} />
                             {grp.name}
-                            {grp.source === 'api' && (
-                              <span style={{ fontSize: '10px', opacity: 0.75 }}>(API)</span>
-                            )}
                           </span>
                         ))
                       ) : (

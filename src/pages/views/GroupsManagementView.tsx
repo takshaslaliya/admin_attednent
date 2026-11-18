@@ -488,7 +488,7 @@ export const GroupsManagementView: React.FC = () => {
           <div>
             <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Groups</div>
             <div style={{ fontSize: '26px', fontWeight: 800, color: '#0f172a', marginTop: '4px' }}>{groups.length}</div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{autoSyncedCount} auto-synced from API</div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Configured student groups</div>
           </div>
           <div style={{ width: '44px', height: '44px', borderRadius: '12px', backgroundColor: '#eef2ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Layers size={22} />
@@ -631,21 +631,8 @@ export const GroupsManagementView: React.FC = () => {
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <span>{g.name}</span>
-                            {g.is_auto_synced && (
-                              <span style={{
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                padding: '1px 6px',
-                                borderRadius: '999px',
-                                backgroundColor: '#eff6ff',
-                                color: '#2563eb',
-                                border: '1px solid #bfdbfe'
-                              }}>
-                                API Sync
-                              </span>
-                            )}
                           </div>
-                          {g.description && (
+                          {g.description && !g.description.startsWith('Auto-synced from Student API') && (
                             <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {g.description}
                             </div>
@@ -717,14 +704,11 @@ export const GroupsManagementView: React.FC = () => {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>{selectedGroupDetail.name}</h3>
-                      {selectedGroupDetail.is_auto_synced && (
-                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', backgroundColor: '#eff6ff', color: '#2563eb' }}>
-                          API Auto-Linked
-                        </span>
-                      )}
                     </div>
                     <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                      {selectedGroupDetail.description || 'Manage students linked with this group'}
+                      {(selectedGroupDetail.description && !selectedGroupDetail.description.startsWith('Auto-synced from Student API'))
+                        ? selectedGroupDetail.description
+                        : 'Manage students linked with this group'}
                     </div>
                   </div>
                 </div>
