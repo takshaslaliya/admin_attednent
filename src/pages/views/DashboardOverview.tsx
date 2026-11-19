@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Users, 
-  CheckCircle2, 
-  Clock, 
-  XCircle, 
-  Sparkles, 
-  RefreshCw, 
-  BarChart2, 
-  Radio, 
+import {
+  Users,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Sparkles,
+  RefreshCw,
+  BarChart2,
+  Radio,
   Search,
   MessageSquare,
   FileText,
@@ -187,7 +187,7 @@ export const DashboardOverview: React.FC = () => {
         templatesList = tRes.data.data;
         setWaTemplates(templatesList);
       }
-    } catch {}
+    } catch { }
     setLoadingTemplates(false);
 
     // Prefer a birthday-category template if admin created one, otherwise first template
@@ -364,7 +364,7 @@ export const DashboardOverview: React.FC = () => {
 
   return (
     <div className="dashboard-content-wrapper">
-      
+
       {/* Floor Leader Notice Banner */}
       {stats?.is_leader_view && (
         <div style={{
@@ -425,8 +425,8 @@ export const DashboardOverview: React.FC = () => {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              background: isToday 
-                ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' 
+              background: isToday
+                ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'
                 : 'linear-gradient(135deg, #475569 0%, #334155 100%)',
               color: '#ffffff',
               padding: '5px 13px',
@@ -622,10 +622,10 @@ export const DashboardOverview: React.FC = () => {
                 }}
               >
                 {renderSessionIcon(
-                  sess.icon_name, 
-                  sess.session_key, 
-                  14, 
-                  undefined, 
+                  sess.icon_name,
+                  sess.session_key,
+                  14,
+                  undefined,
                   { color: isSelected ? '#ffffff' : '#64748b' }
                 )}
                 <span>{sess.session_name}</span>
@@ -792,12 +792,12 @@ export const DashboardOverview: React.FC = () => {
                       fontSize: '12px'
                     }}
                   />
-                  <Legend 
-                    verticalAlign="top" 
-                    align="right" 
-                    height={26} 
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    height={26}
                     iconType="circle"
-                    wrapperStyle={{ fontSize: '11px', fontWeight: 600, paddingBottom: '6px' }} 
+                    wrapperStyle={{ fontSize: '11px', fontWeight: 600, paddingBottom: '6px' }}
                   />
                   <Bar dataKey="present" name="Present" fill="#10b981" radius={[4, 4, 0, 0]} barSize={10} />
                   <Bar dataKey="late" name="Late" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={10} />

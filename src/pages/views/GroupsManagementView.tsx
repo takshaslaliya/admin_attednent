@@ -632,7 +632,7 @@ export const GroupsManagementView: React.FC = () => {
                           <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <span>{g.name}</span>
                           </div>
-                          {g.description && !g.description.startsWith('Auto-synced from Student API') && (
+                          {g.description && !g.description.toLowerCase().includes('auto-synced') && !g.description.toLowerCase().includes('student api') && (
                             <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {g.description}
                             </div>
@@ -706,7 +706,7 @@ export const GroupsManagementView: React.FC = () => {
                       <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>{selectedGroupDetail.name}</h3>
                     </div>
                     <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                      {(selectedGroupDetail.description && !selectedGroupDetail.description.startsWith('Auto-synced from Student API'))
+                      {(selectedGroupDetail.description && !selectedGroupDetail.description.toLowerCase().includes('auto-synced') && !selectedGroupDetail.description.toLowerCase().includes('student api'))
                         ? selectedGroupDetail.description
                         : 'Manage students linked with this group'}
                     </div>

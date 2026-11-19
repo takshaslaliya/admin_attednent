@@ -365,11 +365,12 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         const lTime = d.late_time !== undefined ? d.late_time : match?.late_time;
         setLateTime(lTime ? String(lTime).slice(0, 5) : null);
 
-        // Multiple Attendance: Check BOTH schedule data AND session metadata
+        // Multiple Attendance: Check BOTH schedule data, slot items, AND session metadata
+        const hasSlotMulti = Array.isArray(d.day_schedules) && d.day_schedules.some((s: any) => s.hasMultipleAttendance === true || s.hasMultipleAttendance === 1 || s.hasMultipleAttendance === '1');
         const isMulti = Boolean(
-          d.has_multiple_attendance !== undefined && d.has_multiple_attendance !== null
-            ? (d.has_multiple_attendance && d.has_multiple_attendance !== '0' && d.has_multiple_attendance !== 0)
-            : (match?.has_multiple_attendance && match?.has_multiple_attendance !== '0' && match?.has_multiple_attendance !== 0)
+          (d.has_multiple_attendance && d.has_multiple_attendance !== '0' && d.has_multiple_attendance !== 0) ||
+          (match?.has_multiple_attendance && match?.has_multiple_attendance !== '0' && match?.has_multiple_attendance !== 0) ||
+          hasSlotMulti
         );
 
         setHasMultipleAttendance(isMulti);
@@ -689,7 +690,11 @@ export const LiveAttendanceManager: React.FC<{ sessionKey: string; onSessionDele
         startTime: curTime,
         endTime: curTime,
         lateTime: lateTime,
-        linkedSessionKey: linkedSessionKey
+        linkedSessionKey: linkedSessionKey,
+        hasMultipleAttendance: hasMultipleAttendance,
+        phase2StartTime: phase2StartTime,
+        phase2EndTime: phase2EndTime,
+        phase2LateTime: phase2LateTime
       });
       alert('Attendance stopped immediately.');
       fetchSchedule();
