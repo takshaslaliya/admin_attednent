@@ -100,6 +100,13 @@ export const StudentsManagementView: React.FC = () => {
   const [newTagDesc, setNewTagDesc] = useState('');
   const [creatingTag, setCreatingTag] = useState(false);
 
+  // Rename / Edit Tag States
+  const [editingTagId, setEditingTagId] = useState<number | null>(null);
+  const [editTagName, setEditTagName] = useState('');
+  const [editTagColor, setEditTagColor] = useState('#4f46e5');
+  const [editTagDesc, setEditTagDesc] = useState('');
+  const [updatingTag, setUpdatingTag] = useState(false);
+
   // Bulk Assign Tag States
   const [assignAllTagModalOpen, setAssignAllTagModalOpen] = useState(false);
   const [selectedAssignTagId, setSelectedAssignTagId] = useState<number | null>(null);
@@ -426,6 +433,60 @@ export const StudentsManagementView: React.FC = () => {
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to delete tag');
+    }
+  };
+
+  const startEditingTag = (tag: any) => {
+    setEditingTagId(tag.id);
+    setEditTagName(tag.name || '');
+    setEditTagColor(tag.color || '#4f46e5');
+    setEditTagDesc(tag.description || '');
+  };
+
+  const cancelEditingTag = () => {
+    setEditingTagId(null);
+    setEditTagName('');
+    setEditTagColor('#4f46e5');
+    setEditTagDesc('');
+  };
+
+  const handleSaveRenameTag = async (tagId: number) => {
+    const trimmedName = editTagName.trim();
+    if (!trimmedName) {
+      alert('Tag name cannot be empty');
+      return;
+    }
+
+    setUpdatingTag(true);
+    try {
+      const res = await apiClient.put(`/tags/${tagId}`, {
+        name: trimmedName,
+        color: editTagColor,
+        description: editTagDesc.trim() || undefined
+      });
+
+      if (res.data.success) {
+        const updatedTag = res.data.data;
+        setAllTags(prev => prev.map(t => t.id === tagId ? { ...t, ...updatedTag, name: trimmedName, color: editTagColor, description: editTagDesc.trim() || null } : t));
+
+        setStudents(prev => prev.map(s => ({
+          ...s,
+          tags: (s.tags || []).map((t: any) => (t.id === tagId || t.tag_id === tagId) ? { ...t, name: trimmedName, color: editTagColor } : t)
+        })));
+
+        if (studentTagModal && studentTagModal.assignedTags) {
+          setStudentTagModal(prev => prev ? ({
+            ...prev,
+            assignedTags: prev.assignedTags.map((t: any) => t.id === tagId ? { ...t, name: trimmedName, color: editTagColor } : t)
+          }) : null);
+        }
+
+        cancelEditingTag();
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update tag');
+    } finally {
+      setUpdatingTag(false);
     }
   };
 
@@ -1588,55 +1649,202 @@ export const StudentsManagementView: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {allTags.map(tag => (
-                  <div
-                    key={tag.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 14px',
-                      backgroundColor: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span
-                        style={{
-                          padding: '3px 10px',
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          backgroundColor: `${tag.color}20`,
-                          color: tag.color,
-                          border: `1px solid ${tag.color}50`
-                        }}
-                      >
-                        🏷️ {tag.name}
-                      </span>
-                      <span style={{ fontSize: '12px', color: '#64748b' }}>
-                        {tag.is_system ? '(Default System Tag)' : (tag.description || 'Custom tag')}
-                      </span>
-                    </div>
+                {allTags.map(tag => {
+                  const isEditing = editingTagId === tag.id;
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
-                        {tag.student_count || 0} students
-                      </span>
-                      {!tag.is_system && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCustomTag(tag.id, !!tag.is_system)}
-                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                          title="Delete Tag"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                  return (
+                    <div
+                      key={tag.id}
+                      style={{
+                        padding: '10px 14px',
+                        backgroundColor: isEditing ? '#f8fafc' : '#ffffff',
+                        border: isEditing ? '1.5px solid #6366f1' : '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {isEditing ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#4f46e5' }}>
+                              Rename / Edit Tag
+                            </span>
+                            <span style={{ fontSize: '11px', color: '#64748b' }}>
+                              {tag.is_system ? '(Default System Tag)' : 'Custom Tag'}
+                            </span>
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                              TAG NAME <span style={{ color: '#ef4444' }}>*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={editTagName}
+                              onChange={e => setEditTagName(e.target.value)}
+                              placeholder="Tag name"
+                              autoFocus
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveRenameTag(tag.id);
+                                } else if (e.key === 'Escape') {
+                                  cancelEditingTag();
+                                }
+                              }}
+                              style={{ width: '100%', height: '36px', borderRadius: '6px', fontSize: '13px' }}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                              TAG COLOR
+                            </label>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              {tagColorPalette.map(color => (
+                                <button
+                                  key={color}
+                                  type="button"
+                                  onClick={() => setEditTagColor(color)}
+                                  style={{
+                                    width: '22px',
+                                    height: '22px',
+                                    borderRadius: '50%',
+                                    backgroundColor: color,
+                                    border: editTagColor === color ? '2.5px solid #0f172a' : '2px solid #ffffff',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                    cursor: 'pointer'
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                              DESCRIPTION (OPTIONAL)
+                            </label>
+                            <input
+                              type="text"
+                              value={editTagDesc}
+                              onChange={e => setEditTagDesc(e.target.value)}
+                              placeholder="Tag description..."
+                              style={{ width: '100%', height: '32px', borderRadius: '6px', fontSize: '12px' }}
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '2px' }}>
+                            <button
+                              type="button"
+                              onClick={cancelEditingTag}
+                              disabled={updatingTag}
+                              style={{
+                                padding: '6px 12px',
+                                backgroundColor: '#f1f5f9',
+                                color: '#475569',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveRenameTag(tag.id)}
+                              disabled={updatingTag || !editTagName.trim()}
+                              style={{
+                                padding: '6px 14px',
+                                backgroundColor: '#4f46e5',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: (updatingTag || !editTagName.trim()) ? 'not-allowed' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                              }}
+                            >
+                              <Check size={13} /> {updatingTag ? 'Saving...' : 'Save Changes'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                            <span
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                backgroundColor: `${tag.color}20`,
+                                color: tag.color,
+                                border: `1px solid ${tag.color}50`,
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              🏷️ {tag.name}
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {tag.is_system ? '(Default System Tag)' : (tag.description || 'Custom tag')}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
+                              {tag.student_count || 0} students
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => startEditingTag(tag)}
+                              style={{
+                                background: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                color: '#4f46e5',
+                                cursor: 'pointer',
+                                padding: '5px 7px',
+                                borderRadius: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title="Rename / Edit Tag"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            {!tag.is_system && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCustomTag(tag.id, !!tag.is_system)}
+                                style={{
+                                  background: '#fef2f2',
+                                  border: '1px solid #fee2e2',
+                                  color: '#ef4444',
+                                  cursor: 'pointer',
+                                  padding: '5px 7px',
+                                  borderRadius: '6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Delete Tag"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
