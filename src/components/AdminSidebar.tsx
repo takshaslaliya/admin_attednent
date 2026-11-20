@@ -93,8 +93,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const isDashboard = pathname === '/' || pathname === '/dashboard';
   const isAttendance = pathname === '/attendance' || pathname === '/attendance-reports';
   const isOneDayAttendance = pathname === '/one-day-attendance';
-  const isLeaves = pathname === '/leaves';
-  const isAttendanceActive = isAttendance || isOneDayAttendance || isLeaves;
+  const isAttendanceActive = isAttendance || isOneDayAttendance;
+
+  const isAllLeaves = pathname === '/leaves';
+  const isLeaveTracking = pathname === '/leave-tracking' || pathname === '/leaves/track';
+  const isLeaveApply = pathname === '/leave-apply' || pathname === '/leaves/new';
+  const isLeavesActive = pathname.startsWith('/leave') || pathname.startsWith('/leaves');
 
   const isStudents = pathname === '/students';
   const isLeaders = pathname === '/leaders';
@@ -118,6 +122,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   // Category collapsible state (only open active category by default)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     attendance: isAttendanceActive,
+    leaves: isLeavesActive,
     students: isStudentsActive,
     whatsapp: isWhatsAppActive,
     security: isSecurityActive,
@@ -126,11 +131,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
   useEffect(() => {
     if (isAttendanceActive) setOpenSections(prev => ({ ...prev, attendance: true }));
+    if (isLeavesActive) setOpenSections(prev => ({ ...prev, leaves: true }));
     if (isStudentsActive) setOpenSections(prev => ({ ...prev, students: true }));
     if (isWhatsAppActive) setOpenSections(prev => ({ ...prev, whatsapp: true }));
     if (isSecurityActive) setOpenSections(prev => ({ ...prev, security: true }));
     if (isSessionsActive) setOpenSections(prev => ({ ...prev, sessions: true }));
-  }, [isAttendanceActive, isStudentsActive, isWhatsAppActive, isSecurityActive, isSessionsActive]);
+  }, [isAttendanceActive, isLeavesActive, isStudentsActive, isWhatsAppActive, isSecurityActive, isSessionsActive]);
 
   const toggleSection = (key: string) => {
     setOpenSections(prev => ({
@@ -216,20 +222,60 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <CalendarCheck size={15} className="subitem-icon" style={{ color: '#0d9488' }} />
                   <span>One-Day Attendance</span>
                 </button>
-
-                {canShowLeaves && (
-                  <button
-                    className={`nav-subitem-btn ${isLeaves ? 'active' : ''}`}
-                    onClick={() => handleNavClick('/leaves')}
-                  >
-                    <span className="subitem-bullet"></span>
-                    <Palmtree size={15} className="subitem-icon" style={{ color: '#8b5cf6' }} />
-                    <span>Approved Leaves</span>
-                  </button>
-                )}
               </div>
             )}
           </div>
+
+          {/* 3. Leave Section Category (Top-Level Collapsible Sub-menu like Attendance) */}
+          {canShowLeaves && (
+            <div className="nav-group">
+              <button
+                type="button"
+                className={`nav-item-btn nav-group-btn ${isLeavesActive ? 'parent-active' : ''}`}
+                onClick={() => toggleSection('leaves')}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Palmtree size={18} className="nav-icon" style={{ color: '#8b5cf6' }} />
+                  <span>Leave Section</span>
+                </div>
+                <ChevronDown
+                  size={16}
+                  className={`nav-chevron ${openSections.leaves ? 'open' : ''}`}
+                />
+              </button>
+
+              {openSections.leaves && (
+                <div className="nav-submenu">
+                  <button
+                    className={`nav-subitem-btn ${isAllLeaves ? 'active' : ''}`}
+                    onClick={() => handleNavClick('/leaves')}
+                  >
+                    <span className="subitem-bullet"></span>
+                    <FileText size={15} className="subitem-icon" style={{ color: '#8b5cf6' }} />
+                    <span>Leave Management</span>
+                  </button>
+
+                  <button
+                    className={`nav-subitem-btn ${isLeaveTracking ? 'active' : ''}`}
+                    onClick={() => handleNavClick('/leave-tracking')}
+                  >
+                    <span className="subitem-bullet"></span>
+                    <Clock size={15} className="subitem-icon" style={{ color: '#0ea5e9' }} />
+                    <span>Leave Tracking</span>
+                  </button>
+
+                  <button
+                    className={`nav-subitem-btn ${isLeaveApply ? 'active' : ''}`}
+                    onClick={() => handleNavClick('/leave-apply')}
+                  >
+                    <span className="subitem-bullet"></span>
+                    <PlusCircle size={15} className="subitem-icon" style={{ color: '#10b981' }} />
+                    <span>Record Leave Request</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 3. Students & Users Category (Collapsible Sub-menu) */}
           <div className="nav-group">

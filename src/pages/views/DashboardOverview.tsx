@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { 
   Users, 
@@ -27,6 +28,7 @@ import { renderSessionIcon } from '../../utils/sessionIcons';
 import { ExpandableReasonTooltip } from '../../components/ExpandableReasonTooltip';
 
 export const DashboardOverview: React.FC = () => {
+  const navigate = useNavigate();
   const todayStr = new Date().toLocaleDateString('en-CA');
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [stats, setStats] = useState<any>(null);
@@ -547,7 +549,11 @@ export const DashboardOverview: React.FC = () => {
         </HamsCard>
 
         {/* Leave Today */}
-        <HamsCard padding="20px" style={{ borderLeft: '4px solid #8b5cf6' }}>
+        <HamsCard
+          padding="20px"
+          style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }}
+          onClick={() => navigate('/leaves')}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>
@@ -562,7 +568,7 @@ export const DashboardOverview: React.FC = () => {
             </div>
           </div>
           <div style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: 600, marginTop: '10px' }}>
-            In {currentSessionName} (Approved)
+            In {currentSessionName} (View Leaves ➔)
           </div>
         </HamsCard>
 

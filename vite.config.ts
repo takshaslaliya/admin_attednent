@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3001',
+        target: 'https://lightcoral-eel-306042.hostingersite.com',
         changeOrigin: true,
         secure: false,
       }

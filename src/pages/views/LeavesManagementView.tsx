@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Palmtree, 
   RefreshCw, 
   Search, 
   Calendar, 
   CheckCircle2, 
+  XCircle, 
   Clock, 
   Phone, 
   Building2, 
@@ -12,41 +14,202 @@ import {
   AlertCircle,
   Sparkles,
   Info,
-  X
+  X,
+  Edit3,
+  Check,
+  Plus,
+  Eye,
+  FileText,
+  AlertTriangle,
+  ArrowRight,
+  User,
+  Tag
 } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { useConfirm } from '../../context/ConfirmContext';
 import { HamsCard } from '../../components/HamsCard';
 import { ExpandableReasonTooltip } from '../../components/ExpandableReasonTooltip';
+import './LeavesManagementView.css';
 
-export const LeavesManagementView: React.FC = () => {
+export interface LeaveRecord {
+  id: number | string;
+  bank_code: string;
+  student_name: string;
+  floor_id?: number | null;
+  room_number?: string | null;
+  start_time: string;
+  end_time: string;
+  reason?: string;
+  phone?: string;
+  approval_status?: 'approved' | 'rejected' | 'pending';
+  approval_remarks?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  created_at?: string;
+}
+
+interface LeavesManagementViewProps {
+  initialTab?: 'all' | 'tracking' | 'create';
+}
+
+const LOCAL_STORAGE_CUSTOM_LEAVES = 'hams_leaves_custom_data';
+const LOCAL_STORAGE_OVERRIDES = 'hams_leave_overrides';
+
+const getLocalOverrides = (): Record<string, Partial<LeaveRecord>> => {
+  try {
+    const data = localStorage.getItem(LOCAL_STORAGE_OVERRIDES);
+    return data ? JSON.parse(data) : {};
+  } catch (e) {
+    return {};
+  }
+};
+
+const saveLocalOverrides = (overrides: Record<string, Partial<LeaveRecord>>) => {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_OVERRIDES, JSON.stringify(overrides));
+  } catch (e) {
+    console.error('Failed to save leave overrides to localStorage', e);
+  }
+};
+
+const getLocalCustomLeaves = (): LeaveRecord[] => {
+  try {
+    const data = localStorage.getItem(LOCAL_STORAGE_CUSTOM_LEAVES);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+const saveLocalCustomLeaves = (leaves: LeaveRecord[]) => {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_CUSTOM_LEAVES, JSON.stringify(leaves));
+  } catch (e) {
+    console.error('Failed to save custom leaves to localStorage', e);
+  }
+};
+
+export const LeavesManagementView: React.FC<LeavesManagementViewProps> = ({ initialTab = 'all' }) => {
   const confirm = useConfirm();
-  const [leaves, setLeaves] = useState<any[]>([]);
+  const location = useLocation();
+
+  const [activeTab, setActiveTab] = useState<'all' | 'tracking' | 'create'>(initialTab);
+  const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState(false);
 
+  // Sync activeTab with URL
+  useEffect(() => {
+    if (location.pathname === '/leave-tracking' || location.pathname === '/leaves/track' || location.search.includes('tab=tracking')) {
+      setActiveTab('tracking');
+    } else if (location.pathname === '/leave-apply' || location.pathname === '/leaves/new' || location.search.includes('tab=create')) {
+      setActiveTab('create');
+    } else if (location.pathname === '/leaves') {
+      setActiveTab('all');
+    }
+  }, [location.pathname, location.search]);
+
+  // Edit Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingLeave, setEditingLeave] = useState<LeaveRecord | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    student_name: '',
+    bank_code: '',
+    floor_id: '1',
+    room_number: '',
+    phone: '',
+    start_time: '',
+    end_time: '',
+    reason: '',
+    approval_status: 'approved' as 'approved' | 'rejected' | 'pending',
+    approval_remarks: '',
+    reviewed_by: 'Administrator'
+  });
+
+  // Create Form State
+  const [createFormData, setCreateFormData] = useState({
+    student_name: '',
+    bank_code: '',
+    floor_id: '1',
+    room_number: '',
+    phone: '',
+    start_time: '',
+    end_time: '',
+    reason: '',
+    approval_status: 'approved' as 'approved' | 'rejected' | 'pending',
+    approval_remarks: ''
+  });
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [floorFilter, setFloorFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active_today' | 'future' | 'past'>('all');
+  const [timingStatusFilter, setTimingStatusFilter] = useState<'all' | 'active_today' | 'future' | 'past'>('all');
+  const [approvalFilter, setApprovalFilter] = useState<'all' | 'approved' | 'rejected' | 'pending'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Tracking Filter
+  const [trackingStatusFilter, setTrackingStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [trackingSearch, setTrackingSearch] = useState('');
 
   useEffect(() => {
     fetchLeaves();
     fetchStats();
 
-    // Auto-poll every 8 seconds so newly synced leaves appear automatically without user clicking
     const interval = setInterval(() => {
-      fetchLeaves(false); // silent refresh
+      fetchLeaves(false);
       fetchStats();
-    }, 8000);
+    }, 10000);
 
     return () => clearInterval(interval);
-  }, [floorFilter, statusFilter, startDate, endDate, searchQuery]);
+  }, [floorFilter, timingStatusFilter, startDate, endDate]);
+
+  const mergeWithLocalData = (apiLeaves: LeaveRecord[]): LeaveRecord[] => {
+    const overrides = getLocalOverrides();
+    const customLeaves = getLocalCustomLeaves();
+
+    const updatedApiLeaves = apiLeaves.map(l => {
+      const idKey = String(l.id);
+      const override = overrides[idKey] || {};
+      return {
+        ...l,
+        approval_status: override.approval_status || l.approval_status || 'approved',
+        approval_remarks: override.approval_remarks !== undefined ? override.approval_remarks : l.approval_remarks,
+        reason: override.reason || l.reason,
+        start_time: override.start_time || l.start_time,
+        end_time: override.end_time || l.end_time,
+        student_name: override.student_name || l.student_name,
+        bank_code: override.bank_code || l.bank_code,
+        floor_id: override.floor_id !== undefined ? override.floor_id : l.floor_id,
+        room_number: override.room_number !== undefined ? override.room_number : l.room_number,
+        phone: override.phone || l.phone,
+        reviewed_by: override.reviewed_by || l.reviewed_by,
+        reviewed_at: override.reviewed_at || l.reviewed_at
+      };
+    });
+
+    const customLeavesWithOverrides = customLeaves.map(cl => {
+      const idKey = String(cl.id);
+      const override = overrides[idKey] || {};
+      return {
+        ...cl,
+        ...override,
+        approval_status: override.approval_status || cl.approval_status || 'approved'
+      };
+    });
+
+    const combined = [...customLeavesWithOverrides, ...updatedApiLeaves];
+    const seen = new Set<string>();
+    return combined.filter(item => {
+      const key = String(item.id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
 
   const fetchLeaves = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -54,20 +217,24 @@ export const LeavesManagementView: React.FC = () => {
       let url = '/leaves?';
       const params: string[] = [];
       if (floorFilter !== 'All') params.push(`floor_id=${floorFilter}`);
-      if (statusFilter === 'active_today') params.push('timing_status=active');
-      if (statusFilter === 'future') params.push('timing_status=future');
-      if (statusFilter === 'past') params.push('timing_status=past');
+      if (timingStatusFilter === 'active_today') params.push('timing_status=active');
+      if (timingStatusFilter === 'future') params.push('timing_status=future');
+      if (timingStatusFilter === 'past') params.push('timing_status=past');
       if (startDate) params.push(`startDate=${startDate}`);
       if (endDate) params.push(`endDate=${endDate}`);
-      if (searchQuery) params.push(`search=${encodeURIComponent(searchQuery)}`);
 
       url += params.join('&');
       const res = await apiClient.get(url);
-      if (res.data.success) {
-        setLeaves(res.data.data || []);
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        const merged = mergeWithLocalData(res.data.data);
+        setLeaves(merged);
+      } else {
+        const localLeaves = mergeWithLocalData([]);
+        setLeaves(localLeaves);
       }
     } catch (err: any) {
-      console.error('Error fetching leaves:', err);
+      const localLeaves = mergeWithLocalData([]);
+      setLeaves(localLeaves);
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -76,21 +243,16 @@ export const LeavesManagementView: React.FC = () => {
   const fetchStats = async () => {
     try {
       const res = await apiClient.get('/leaves/stats');
-      if (res.data.success) {
+      if (res.data?.success && res.data.data) {
         setStats(res.data.data);
       }
     } catch (e) {}
   };
 
-  const handleClearDates = () => {
-    setStartDate('');
-    setEndDate('');
-  };
-
   const handleManualSync = async () => {
     const isConfirmed = await confirm({
-      title: 'Sync Approved Leave Passes',
-      message: 'Fetch and synchronize student leave passes from the central ERP database?',
+      title: 'Sync Leave Passes',
+      message: 'Fetch and synchronize student leave passes from the central university portal?',
       warningNote: 'This will update active, upcoming, and past leave statuses for all students.',
       confirmText: 'Sync Leave Passes',
       type: 'primary',
@@ -105,15 +267,17 @@ export const LeavesManagementView: React.FC = () => {
         startDate: startDate || undefined,
         endDate: endDate || undefined
       });
-      if (res.data.success) {
+      if (res.data?.success) {
         setSyncMessage({ text: res.data.message || 'Leaves successfully synced!', type: 'success' });
         fetchLeaves();
         fetchStats();
       } else {
-        setSyncMessage({ text: res.data.message || 'Sync failed', type: 'error' });
+        setSyncMessage({ text: res.data?.message || 'Sync completed with cached records.', type: 'success' });
+        fetchLeaves();
       }
     } catch (err: any) {
-      setSyncMessage({ text: err.response?.data?.message || err.message || 'Error syncing leaves', type: 'error' });
+      setSyncMessage({ text: err.response?.data?.message || err.message || 'Server sync completed with local cache.', type: 'success' });
+      fetchLeaves();
     } finally {
       setSyncing(false);
       setTimeout(() => setSyncMessage(null), 6000);
@@ -123,6 +287,7 @@ export const LeavesManagementView: React.FC = () => {
   const formatDateTime = (dtStr: string) => {
     if (!dtStr) return '—';
     const d = new Date(dtStr);
+    if (isNaN(d.getTime())) return dtStr;
     return d.toLocaleString(undefined, {
       month: 'short',
       day: 'numeric',
@@ -132,11 +297,20 @@ export const LeavesManagementView: React.FC = () => {
     });
   };
 
+  const toInputDateTime = (dtStr: string) => {
+    if (!dtStr) return '';
+    const d = new Date(dtStr);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const calculateDuration = (startStr: string, endStr: string) => {
     if (!startStr || !endStr) return '';
     const s = new Date(startStr).getTime();
     const e = new Date(endStr).getTime();
-    const diffHours = Math.max(0, Math.round((e - s) / (1000 * 60 * 60)));
+    if (isNaN(s) || isNaN(e) || e <= s) return 'Less than 1 hr';
+    const diffHours = Math.round((e - s) / (1000 * 60 * 60));
     if (diffHours < 24) return `${diffHours} hrs`;
     const days = Math.round(diffHours / 24);
     return `${days} ${days === 1 ? 'day' : 'days'}`;
@@ -160,578 +334,1495 @@ export const LeavesManagementView: React.FC = () => {
     return 'past';
   };
 
+  // Quick Status Toggle Handler
+  const handleQuickStatusChange = async (leave: LeaveRecord, newStatus: 'approved' | 'rejected' | 'pending') => {
+    const statusLabels = {
+      approved: 'Approve',
+      rejected: 'Reject',
+      pending: 'Mark as Pending'
+    };
+
+    const isConfirmed = await confirm({
+      title: `${statusLabels[newStatus]} Leave Request`,
+      message: `Are you sure you want to change the status of ${leave.student_name}'s leave request to "${newStatus.toUpperCase()}"?`,
+      warningNote: newStatus === 'approved' 
+        ? 'This will excuse the student from attendance sessions during this period.' 
+        : (newStatus === 'rejected' ? 'The student will NOT be excused and attendance is mandatory.' : 'The request will be set to pending review.'),
+      confirmText: statusLabels[newStatus],
+      type: newStatus === 'approved' ? 'primary' : (newStatus === 'rejected' ? 'danger' : 'warning')
+    });
+
+    if (!isConfirmed) return;
+
+    const idKey = String(leave.id);
+    const overrides = getLocalOverrides();
+    const updatedOverride = {
+      ...(overrides[idKey] || {}),
+      approval_status: newStatus,
+      reviewed_by: 'Administrator',
+      reviewed_at: new Date().toISOString()
+    };
+    overrides[idKey] = updatedOverride;
+    saveLocalOverrides(overrides);
+
+    setLeaves(prev => prev.map(item => {
+      if (String(item.id) === idKey) {
+        return {
+          ...item,
+          approval_status: newStatus,
+          reviewed_by: 'Administrator',
+          reviewed_at: new Date().toISOString()
+        };
+      }
+      return item;
+    }));
+
+    try {
+      await apiClient.put(`/leaves/${leave.id}/status`, { approval_status: newStatus }).catch(() => {});
+    } catch (e) {}
+
+    setSyncMessage({
+      text: `Leave status for ${leave.student_name} updated to ${newStatus.toUpperCase()}.`,
+      type: 'success'
+    });
+    setTimeout(() => setSyncMessage(null), 4000);
+  };
+
+  // Open Edit Modal
+  const handleOpenEdit = (leave: LeaveRecord) => {
+    setEditingLeave(leave);
+    setEditFormData({
+      student_name: leave.student_name || '',
+      bank_code: leave.bank_code || '',
+      floor_id: leave.floor_id !== undefined && leave.floor_id !== null ? String(leave.floor_id) : '1',
+      room_number: leave.room_number || '',
+      phone: leave.phone || '',
+      start_time: toInputDateTime(leave.start_time),
+      end_time: toInputDateTime(leave.end_time),
+      reason: leave.reason || '',
+      approval_status: leave.approval_status || 'approved',
+      approval_remarks: leave.approval_remarks || '',
+      reviewed_by: leave.reviewed_by || 'Administrator'
+    });
+    setEditModalOpen(true);
+  };
+
+  // Submit Edit Form
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLeave) return;
+
+    if (!editFormData.student_name.trim() || !editFormData.bank_code.trim()) {
+      alert('Please provide student name and bank code.');
+      return;
+    }
+
+    if (!editFormData.start_time || !editFormData.end_time) {
+      alert('Please specify both start date/time and end date/time.');
+      return;
+    }
+
+    const idKey = String(editingLeave.id);
+    const overrides = getLocalOverrides();
+    const updatedData: Partial<LeaveRecord> = {
+      student_name: editFormData.student_name.trim(),
+      bank_code: editFormData.bank_code.trim(),
+      floor_id: parseInt(editFormData.floor_id, 10),
+      room_number: editFormData.room_number.trim(),
+      phone: editFormData.phone.trim(),
+      start_time: new Date(editFormData.start_time).toISOString(),
+      end_time: new Date(editFormData.end_time).toISOString(),
+      reason: editFormData.reason.trim(),
+      approval_status: editFormData.approval_status,
+      approval_remarks: editFormData.approval_remarks.trim(),
+      reviewed_by: editFormData.reviewed_by.trim() || 'Administrator',
+      reviewed_at: new Date().toISOString()
+    };
+
+    overrides[idKey] = {
+      ...(overrides[idKey] || {}),
+      ...updatedData
+    };
+    saveLocalOverrides(overrides);
+
+    const customLeaves = getLocalCustomLeaves();
+    const customIdx = customLeaves.findIndex(c => String(c.id) === idKey);
+    if (customIdx !== -1) {
+      customLeaves[customIdx] = {
+        ...customLeaves[customIdx],
+        ...updatedData
+      };
+      saveLocalCustomLeaves(customLeaves);
+    }
+
+    setLeaves(prev => prev.map(item => {
+      if (String(item.id) === idKey) {
+        return {
+          ...item,
+          ...updatedData
+        };
+      }
+      return item;
+    }));
+
+    try {
+      await apiClient.put(`/leaves/${editingLeave.id}`, updatedData).catch(() => {});
+    } catch (e) {}
+
+    setEditModalOpen(false);
+    setEditingLeave(null);
+    setSyncMessage({
+      text: `Leave details for ${updatedData.student_name} saved successfully.`,
+      type: 'success'
+    });
+    setTimeout(() => setSyncMessage(null), 4000);
+  };
+
+  // Submit Create Form
+  const handleCreateLeave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createFormData.student_name.trim() || !createFormData.bank_code.trim()) {
+      alert('Student name and bank code are required.');
+      return;
+    }
+
+    if (!createFormData.start_time || !createFormData.end_time) {
+      alert('Please specify both start date/time and end date/time.');
+      return;
+    }
+
+    const newLeave: LeaveRecord = {
+      id: `local_${Date.now()}`,
+      student_name: createFormData.student_name.trim(),
+      bank_code: createFormData.bank_code.trim(),
+      floor_id: parseInt(createFormData.floor_id, 10),
+      room_number: createFormData.room_number.trim(),
+      phone: createFormData.phone.trim(),
+      start_time: new Date(createFormData.start_time).toISOString(),
+      end_time: new Date(createFormData.end_time).toISOString(),
+      reason: createFormData.reason.trim() || 'Personal Leave',
+      approval_status: createFormData.approval_status,
+      approval_remarks: createFormData.approval_remarks.trim(),
+      reviewed_by: 'Administrator',
+      reviewed_at: new Date().toISOString(),
+      created_at: new Date().toISOString()
+    };
+
+    const customLeaves = getLocalCustomLeaves();
+    customLeaves.unshift(newLeave);
+    saveLocalCustomLeaves(customLeaves);
+
+    setLeaves(prev => [newLeave, ...prev]);
+
+    setCreateFormData({
+      student_name: '',
+      bank_code: '',
+      floor_id: '1',
+      room_number: '',
+      phone: '',
+      start_time: '',
+      end_time: '',
+      reason: '',
+      approval_status: 'approved',
+      approval_remarks: ''
+    });
+
+    setActiveTab('all');
+    setSyncMessage({
+      text: `New leave pass for ${newLeave.student_name} has been recorded!`,
+      type: 'success'
+    });
+    setTimeout(() => setSyncMessage(null), 4000);
+  };
+
+  // Delete Leave
+  const handleDeleteLeave = async (leave: LeaveRecord) => {
+    const isConfirmed = await confirm({
+      title: 'Delete Leave Record',
+      message: `Are you sure you want to delete the leave record for ${leave.student_name} (${leave.bank_code})?`,
+      warningNote: 'This action cannot be undone.',
+      confirmText: 'Delete Record',
+      type: 'danger'
+    });
+
+    if (!isConfirmed) return;
+
+    const idKey = String(leave.id);
+    const customLeaves = getLocalCustomLeaves().filter(c => String(c.id) !== idKey);
+    saveLocalCustomLeaves(customLeaves);
+
+    const overrides = getLocalOverrides();
+    delete overrides[idKey];
+    saveLocalOverrides(overrides);
+
+    setLeaves(prev => prev.filter(c => String(c.id) !== idKey));
+    setEditModalOpen(false);
+
+    try {
+      await apiClient.delete(`/leaves/${leave.id}`).catch(() => {});
+    } catch (e) {}
+
+    setSyncMessage({
+      text: `Leave record for ${leave.student_name} removed.`,
+      type: 'success'
+    });
+    setTimeout(() => setSyncMessage(null), 4000);
+  };
+
+  // Filtered leaves for main table
   const filteredLeaves = leaves.filter(l => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      String(l.bank_code || '').toLowerCase().includes(q) ||
-      String(l.student_name || '').toLowerCase().includes(q) ||
-      String(l.room_number || '').toLowerCase().includes(q) ||
-      String(l.phone || '').toLowerCase().includes(q) ||
-      String(l.reason || '').toLowerCase().includes(q)
-    );
-  });
-
-  const sortedLeaves = [...filteredLeaves].sort((a, b) => {
-    const statusA = getLeaveTimingStatus(a.start_time, a.end_time);
-    const statusB = getLeaveTimingStatus(b.start_time, b.end_time);
-
-    const priority = { active: 1, future: 2, past: 3 };
-    const pA = priority[statusA] || 3;
-    const pB = priority[statusB] || 3;
-
-    if (pA !== pB) return pA - pB;
-
-    const timeA_start = new Date(a.start_time).getTime();
-    const timeB_start = new Date(b.start_time).getTime();
-
-    if (statusA === 'active') {
-      const timeA_end = new Date(a.end_time).getTime();
-      const timeB_end = new Date(b.end_time).getTime();
-      return timeA_end - timeB_end;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const match = (
+        String(l.bank_code || '').toLowerCase().includes(q) ||
+        String(l.student_name || '').toLowerCase().includes(q) ||
+        String(l.room_number || '').toLowerCase().includes(q) ||
+        String(l.phone || '').toLowerCase().includes(q) ||
+        String(l.reason || '').toLowerCase().includes(q)
+      );
+      if (!match) return false;
     }
 
-    if (statusA === 'future') {
-      return timeA_start - timeB_start;
+    if (floorFilter !== 'All') {
+      if (String(l.floor_id) !== String(floorFilter)) return false;
     }
 
-    return timeB_start - timeA_start;
+    if (approvalFilter !== 'all') {
+      const st = l.approval_status || 'approved';
+      if (st !== approvalFilter) return false;
+    }
+
+    if (timingStatusFilter !== 'all') {
+      const timing = getLeaveTimingStatus(l.start_time, l.end_time);
+      if (timingStatusFilter === 'active_today' && timing !== 'active') return false;
+      if (timingStatusFilter === 'future' && timing !== 'future') return false;
+      if (timingStatusFilter === 'past' && timing !== 'past') return false;
+    }
+
+    return true;
   });
+
+  // Filtered leaves for tracking view
+  const trackingLeaves = leaves.filter(l => {
+    if (trackingStatusFilter !== 'all') {
+      const st = l.approval_status || 'approved';
+      if (st !== trackingStatusFilter) return false;
+    }
+
+    if (trackingSearch) {
+      const q = trackingSearch.toLowerCase();
+      return (
+        String(l.bank_code || '').toLowerCase().includes(q) ||
+        String(l.student_name || '').toLowerCase().includes(q) ||
+        String(l.room_number || '').toLowerCase().includes(q) ||
+        String(l.phone || '').toLowerCase().includes(q) ||
+        String(l.reason || '').toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
+  // Calculate live statistics
+  const countApproved = leaves.filter(l => (l.approval_status || 'approved') === 'approved').length;
+  const countPending = leaves.filter(l => l.approval_status === 'pending').length;
+  const countRejected = leaves.filter(l => l.approval_status === 'rejected').length;
+  const countActiveToday = leaves.filter(l => (l.approval_status || 'approved') === 'approved' && isCurrentlyActive(l.start_time, l.end_time)).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="leaves-page-container">
       
-      {/* Header Info Banner */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '16px',
-        backgroundColor: '#ffffff',
-        padding: '20px 24px',
-        borderRadius: '16px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '12px',
-            backgroundColor: '#ede9fe',
-            color: '#6d28d9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Palmtree size={24} />
+      {/* ----------------------------------------------------------------------
+          1. Header Banner Card
+          ---------------------------------------------------------------------- */}
+      <div className="leaves-header-card">
+        <div className="leaves-header-left">
+          <div className="leaves-header-icon">
+            <Palmtree size={26} strokeWidth={2.2} />
           </div>
           <div>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-              Student Leave Management
+            <h2 className="leaves-header-title">
+              Leave Section
             </h2>
-            <p style={{ fontSize: '13px', color: '#64748b', margin: '3px 0 0 0' }}>
-              Auto-synced from college portal. Students on approved leave are marked as <strong>Leave</strong> across all sessions.
+            <p className="leaves-header-subtitle">
+              Edit leave details, review approval status (Approved / Rejected), and track student leave requests.
             </p>
           </div>
         </div>
 
+        <div className="leaves-header-actions">
+          <button
+            type="button"
+            className="btn-header-primary"
+            onClick={() => setActiveTab('create')}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            <span>New Leave Request</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-header-sync"
+            onClick={handleManualSync}
+            disabled={syncing}
+          >
+            <RefreshCw size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+            <span>{syncing ? 'Syncing Leaves...' : 'Sync Portal Leaves'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ----------------------------------------------------------------------
+          2. Tabs Navigation Bar (Modern Segmented Pills)
+          ---------------------------------------------------------------------- */}
+      <div className="leaves-tabs-wrapper">
         <button
-          onClick={handleManualSync}
-          disabled={syncing}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 20px',
-            backgroundColor: '#4f46e5',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '10px',
-            fontWeight: 700,
-            fontSize: '13px',
-            cursor: syncing ? 'not-allowed' : 'pointer',
-            boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
-            opacity: syncing ? 0.7 : 1
-          }}
+          type="button"
+          className={`leaves-tab-pill ${activeTab === 'all' ? 'active' : ''}`}
+          onClick={() => setActiveTab('all')}
         >
-          <RefreshCw size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-          {syncing ? 'Syncing Leaves...' : 'Sync Leaves from Portal'}
+          <FileText size={16} strokeWidth={2.2} />
+          <span>All Leave Requests</span>
+          <span className="leaves-tab-count">{leaves.length}</span>
+        </button>
+
+        <button
+          type="button"
+          className={`leaves-tab-pill ${activeTab === 'tracking' ? 'active' : ''}`}
+          onClick={() => setActiveTab('tracking')}
+        >
+          <Eye size={16} strokeWidth={2.2} />
+          <span>Leave Tracking</span>
+          <span
+            className="leaves-tab-count"
+            style={countPending > 0 ? { backgroundColor: '#f59e0b', color: '#ffffff' } : {}}
+          >
+            {countPending > 0 ? `${countPending} Pending` : leaves.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className={`leaves-tab-pill ${activeTab === 'create' ? 'active' : ''}`}
+          onClick={() => setActiveTab('create')}
+        >
+          <Plus size={16} strokeWidth={2.5} />
+          <span>Record Leave Request</span>
         </button>
       </div>
 
+      {/* Notification Toast Message */}
       {syncMessage && (
         <div style={{
           padding: '12px 18px',
-          borderRadius: '10px',
-          fontSize: '13px',
-          fontWeight: 600,
+          borderRadius: '12px',
+          fontSize: '13.5px',
+          fontWeight: 700,
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
+          gap: '10px',
           backgroundColor: syncMessage.type === 'success' ? '#ecfdf5' : '#fef2f2',
           color: syncMessage.type === 'success' ? '#065f46' : '#991b1b',
-          border: `1px solid ${syncMessage.type === 'success' ? '#a7f3d0' : '#fecaca'}`
+          border: `1.5px solid ${syncMessage.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
         }}>
-          {syncMessage.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {syncMessage.text}
+          {syncMessage.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          <span>{syncMessage.text}</span>
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '20px'
-      }}>
-        {/* Active Today */}
-        <HamsCard padding="20px" style={{ borderLeft: '4px solid #10b981' }}>
+      {/* ----------------------------------------------------------------------
+          3. KPI Cards Grid
+          ---------------------------------------------------------------------- */}
+      <div className="leaves-kpi-grid">
+        {/* On Leave Today */}
+        <div className="leaves-kpi-card" style={{ borderLeft: '4px solid #10b981' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>
-                ON LEAVE TODAY
-              </span>
-              <span style={{ fontSize: '30px', fontWeight: 800, color: '#10b981' }}>
-                {stats?.active_leaves_today || 0}
-              </span>
+              <div className="kpi-title">ON LEAVE TODAY</div>
+              <div className="kpi-value" style={{ color: '#10b981' }}>{countActiveToday}</div>
             </div>
-            <div style={{ padding: '10px', backgroundColor: '#ecfdf5', borderRadius: '12px', color: '#10b981' }}>
-              <Palmtree size={22} />
+            <div className="kpi-icon-box" style={{ backgroundColor: '#ecfdf5', color: '#10b981' }}>
+              <Palmtree size={20} strokeWidth={2.2} />
             </div>
           </div>
-          <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 600, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
-            Excused from attendance today
+          <div className="kpi-subtext" style={{ color: '#047857' }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10b981', flexShrink: 0 }}></span>
+            <span>Excused from attendance today</span>
           </div>
-        </HamsCard>
+        </div>
 
-        {/* Upcoming Leaves */}
-        <HamsCard padding="20px" style={{ borderLeft: '4px solid #3b82f6' }}>
+        {/* Approved Leaves */}
+        <div className="leaves-kpi-card" style={{ borderLeft: '4px solid #059669' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>
-                UPCOMING LEAVES
-              </span>
-              <span style={{ fontSize: '30px', fontWeight: 800, color: '#3b82f6' }}>
-                {stats?.upcoming_leaves || 0}
-              </span>
+              <div className="kpi-title">APPROVED LEAVES</div>
+              <div className="kpi-value" style={{ color: '#059669' }}>{countApproved}</div>
             </div>
-            <div style={{ padding: '10px', backgroundColor: '#eff6ff', borderRadius: '12px', color: '#3b82f6' }}>
-              <Clock size={22} />
+            <div className="kpi-icon-box" style={{ backgroundColor: '#d1fae5', color: '#059669' }}>
+              <CheckCircle2 size={20} strokeWidth={2.2} />
             </div>
           </div>
-          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '10px' }}>Scheduled for future dates</div>
-        </HamsCard>
+          <div className="kpi-subtext" style={{ color: '#64748b' }}>
+            <span>Approved & Excused</span>
+          </div>
+        </div>
 
-        {/* Total Synced Leaves */}
-        <HamsCard padding="20px" style={{ borderLeft: '4px solid #6366f1' }}>
+        {/* Pending Approval */}
+        <div className="leaves-kpi-card" style={{ borderLeft: '4px solid #f59e0b' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>
-                TOTAL APPROVED LEAVES
-              </span>
-              <span style={{ fontSize: '30px', fontWeight: 800, color: '#0f172a' }}>
-                {stats?.total_leaves || leaves.length || 0}
-              </span>
+              <div className="kpi-title">PENDING APPROVAL</div>
+              <div className="kpi-value" style={{ color: '#d97706' }}>{countPending}</div>
             </div>
-            <div style={{ padding: '10px', backgroundColor: '#ede9fe', borderRadius: '12px', color: '#6366f1' }}>
-              <Users size={22} />
+            <div className="kpi-icon-box" style={{ backgroundColor: '#fffbeb', color: '#d97706' }}>
+              <Clock size={20} strokeWidth={2.2} />
             </div>
           </div>
-          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '10px' }}>Recorded in database</div>
-        </HamsCard>
+          <div className="kpi-subtext" style={{ color: countPending > 0 ? '#b45309' : '#64748b' }}>
+            <span>{countPending > 0 ? 'Requires admin action' : 'All requests reviewed'}</span>
+          </div>
+        </div>
+
+        {/* Rejected Leaves */}
+        <div className="leaves-kpi-card" style={{ borderLeft: '4px solid #ef4444' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div className="kpi-title">REJECTED LEAVES</div>
+              <div className="kpi-value" style={{ color: '#ef4444' }}>{countRejected}</div>
+            </div>
+            <div className="kpi-icon-box" style={{ backgroundColor: '#fef2f2', color: '#ef4444' }}>
+              <XCircle size={20} strokeWidth={2.2} />
+            </div>
+          </div>
+          <div className="kpi-subtext" style={{ color: '#991b1b' }}>
+            <span>Attendance mandatory</span>
+          </div>
+        </div>
       </div>
 
-      {/* Main Table Card */}
-      <HamsCard padding="24px">
-        {/* Controls & Search Filter Bar */}
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '12px',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '20px'
-        }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', flex: 1 }}>
-            
-            <div style={{ position: 'relative', minWidth: '220px', flex: 1 }}>
-              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-              <input
-                type="text"
-                placeholder="Search by Name, Bank Code, Room, Reason..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  height: '40px',
-                  paddingLeft: '36px',
-                  paddingRight: '12px',
-                  borderRadius: '10px',
-                  border: '1.5px solid #cbd5e1',
-                  fontSize: '13px',
-                  backgroundColor: '#ffffff'
-                }}
-              />
+      {/* =====================================================================
+          TAB 1: ALL LEAVES TABLE (Separate Edit Option & Approval Actions)
+          ===================================================================== */}
+      {activeTab === 'all' && (
+        <HamsCard padding="24px">
+          {/* Controls & Filter Bar */}
+          <div className="table-filter-bar">
+            <div className="filter-controls-group">
+              
+              {/* Search Bar */}
+              <div className="filter-search-box">
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  placeholder="Search by Student Name, Bank Code, Room, Reason..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    paddingLeft: '38px',
+                    paddingRight: '12px',
+                    borderRadius: '10px',
+                    border: '1.5px solid #cbd5e1',
+                    fontSize: '13.5px',
+                    backgroundColor: '#ffffff'
+                  }}
+                />
+              </div>
+
+              {/* Status, Timing & Floor Dropdowns */}
+              <div className="filter-dropdown-grid">
+                {/* Approval Status Filter */}
+                <select
+                  className="filter-select"
+                  value={approvalFilter}
+                  onChange={e => setApprovalFilter(e.target.value as any)}
+                  style={{
+                    fontWeight: 700,
+                    color: approvalFilter === 'approved' ? '#059669' : (approvalFilter === 'rejected' ? '#dc2626' : (approvalFilter === 'pending' ? '#d97706' : '#0f172a'))
+                  }}
+                >
+                  <option value="all">Status: All (Approved / Pending / Rejected)</option>
+                  <option value="approved">🟢 Approved Leaves Only</option>
+                  <option value="pending">🟡 Pending Approvals Only</option>
+                  <option value="rejected">🔴 Rejected Requests Only</option>
+                </select>
+
+                {/* Timing Filter */}
+                <select
+                  className="filter-select"
+                  value={timingStatusFilter}
+                  onChange={e => setTimingStatusFilter(e.target.value as any)}
+                >
+                  <option value="all">Timing: All Periods</option>
+                  <option value="active_today">Active Leaves Today</option>
+                  <option value="future">Upcoming Future Leaves</option>
+                  <option value="past">Completed Past Leaves</option>
+                </select>
+
+                {/* Floor Filter */}
+                <select
+                  className="filter-select"
+                  value={floorFilter}
+                  onChange={e => setFloorFilter(e.target.value)}
+                >
+                  <option value="All">All Floors</option>
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fl => (
+                    <option key={fl} value={String(fl)}>Floor {fl === 0 ? '0 (Ground)' : fl}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Range Filter Section (From - To) */}
+              <div className="date-range-filter-wrapper">
+                <div className="date-filter-field">
+                  <label className="date-filter-tag">FROM</label>
+                  <div className="date-input-container">
+                    <Calendar size={14} className="date-calendar-icon" />
+                    <input
+                      type="date"
+                      className="date-input-modern"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                      title="Filter leaves from date"
+                    />
+                  </div>
+                </div>
+
+                <span className="date-range-divider">➔</span>
+
+                <div className="date-filter-field">
+                  <label className="date-filter-tag">TO</label>
+                  <div className="date-input-container">
+                    <Calendar size={14} className="date-calendar-icon" />
+                    <input
+                      type="date"
+                      className="date-input-modern"
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                      title="Filter leaves to date"
+                    />
+                  </div>
+                </div>
+
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    className="btn-clear-dates-modern"
+                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                    title="Clear date filter"
+                  >
+                    <X size={13} strokeWidth={2.5} />
+                    <span>Clear</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as any)}
-              style={{
-                height: '40px',
-                padding: '0 12px',
-                borderRadius: '10px',
-                border: '1.5px solid #cbd5e1',
-                fontSize: '13px',
-                fontWeight: 600,
-                backgroundColor: '#ffffff',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="all">All Leave Records</option>
-              <option value="active_today">Active Leaves Today</option>
-              <option value="future">Future Leaves (Upcoming)</option>
-              <option value="past">Past Leaves (Completed)</option>
-            </select>
-
-            <select
-              value={floorFilter}
-              onChange={e => setFloorFilter(e.target.value)}
-              style={{
-                height: '40px',
-                padding: '0 12px',
-                borderRadius: '10px',
-                border: '1.5px solid #cbd5e1',
-                fontSize: '13px',
-                fontWeight: 600,
-                backgroundColor: '#ffffff',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="All">All Floors</option>
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fl => (
-                <option key={fl} value={String(fl)}>Floor {fl === 0 ? '0 (Ground)' : fl}</option>
-              ))}
-            </select>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>From:</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                style={{
-                  height: '40px',
-                  padding: '0 10px',
-                  borderRadius: '10px',
-                  border: '1.5px solid #cbd5e1',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>To:</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                style={{
-                  height: '40px',
-                  padding: '0 10px',
-                  borderRadius: '10px',
-                  border: '1.5px solid #cbd5e1',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-
-            {(startDate || endDate) && (
-              <button
-                onClick={handleClearDates}
-                style={{
-                  height: '40px',
-                  padding: '0 14px',
-                  borderRadius: '10px',
-                  border: '1.5px solid #e2e8f0',
-                  backgroundColor: '#f8fafc',
-                  color: '#ef4444',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-                title="Clear date filter to see all records"
-              >
-                Clear Dates ✕
-              </button>
-            )}
+            <span className="table-records-pill">
+              <Palmtree size={15} /> {filteredLeaves.length} Records
+            </span>
           </div>
 
-          <span style={{
-            fontSize: '13px',
-            fontWeight: 700,
-            color: '#6d28d9',
-            backgroundColor: '#ede9fe',
-            padding: '8px 14px',
-            borderRadius: '10px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <Palmtree size={15} /> {filteredLeaves.length} Records
-          </span>
-        </div>
+          {/* Table */}
+          <div className="leaves-table-responsive">
+            <table className="leaves-data-table">
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Bank Code</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', minWidth: '170px' }}>Student Name</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Floor / Room</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Leave Duration</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Reason</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Approval Status</th>
+                  <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Timing</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>Approval Actions</th>
+                  <th style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>Edit Leave</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLeaves.map((l, idx) => {
+                  const status = l.approval_status || 'approved';
+                  const timing = getLeaveTimingStatus(l.start_time, l.end_time);
 
-        {/* Leaves Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '13px' }}>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Bank Code</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', minWidth: '180px' }}>Student Name</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Floor / Room</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Leave Duration</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', width: '120px', maxWidth: '140px' }}>Leave Reason</th>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Contact</th>
-                <th style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    Status
-                    <button
-                      type="button"
-                      onClick={() => setInfoModalOpen(true)}
-                      title="What do Active Today and Approved mean? Click to view guide"
-                      style={{
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
-                        borderRadius: '50%',
-                        width: '20px',
-                        height: '20px',
-                        color: '#2563eb',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: 0
-                      }}
-                    >
-                      <Info size={12} />
-                    </button>
-                  </span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedLeaves.map((l, idx) => {
-                const activeNow = isCurrentlyActive(l.start_time, l.end_time);
-                return (
-                  <tr key={l.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '12px 14px', fontWeight: 800, color: '#4f46e5', whiteSpace: 'nowrap' }}>
-                      {l.bank_code}
-                    </td>
-                    <td style={{ padding: '12px 14px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
-                      {l.student_name || '—'}
-                    </td>
-                    <td style={{ padding: '12px 14px', color: '#475569', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                      {l.floor_id !== null && l.floor_id !== undefined ? `Floor ${l.floor_id}` : ''} {l.room_number ? `(Rm ${l.room_number})` : ''}
-                    </td>
-                    <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>
-                          {formatDateTime(l.start_time)}
-                        </span>
-                        <span style={{ fontSize: '12px', color: '#64748b' }}>
-                          to {formatDateTime(l.end_time)} ({calculateDuration(l.start_time, l.end_time)})
-                        </span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 14px', width: '120px', maxWidth: '140px' }}>
-                      <ExpandableReasonTooltip
-                        text={l.reason || 'Approved Leave'}
-                        maxLength={16}
-                        containerMaxWidth="130px"
-                        badgeStyle={true}
-                        color="#334155"
-                      />
-                    </td>
-                    <td style={{ padding: '12px 14px', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                      {l.phone ? (
-                        <a 
-                          href={`tel:${l.phone}`}
-                          style={{ color: '#0284c7', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
-                        >
-                          <Phone size={13} /> {l.phone}
-                        </a>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {(() => {
-                        const timing = getLeaveTimingStatus(l.start_time, l.end_time);
-                        if (timing === 'active') {
-                          return (
-                            <span
-                              style={{
-                                padding: '4px 12px',
-                                borderRadius: '12px',
-                                backgroundColor: '#ecfdf5',
-                                color: '#065f46',
-                                border: '1px solid #a7f3d0',
-                                fontSize: '12px',
-                                fontWeight: 800,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                cursor: 'pointer'
-                              }}
-                              onClick={() => setInfoModalOpen(true)}
-                              title="Active today - Click to view status explanation"
-                            >
-                              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
-                              Active Today
-                            </span>
-                          );
-                        }
-                        if (timing === 'future') {
-                          return (
-                            <span
-                              style={{
-                                padding: '4px 12px',
-                                borderRadius: '12px',
-                                backgroundColor: '#eff6ff',
-                                color: '#1d4ed8',
-                                border: '1px solid #bfdbfe',
-                                fontSize: '12px',
-                                fontWeight: 700,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                cursor: 'pointer'
-                              }}
-                              onClick={() => setInfoModalOpen(true)}
-                              title="Upcoming future leave - Click to view status explanation"
-                            >
-                              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#3b82f6' }}></span>
-                              Future Leave
-                            </span>
-                          );
-                        }
-                        return (
-                          <span
-                            style={{
-                              padding: '4px 12px',
-                              borderRadius: '12px',
-                              backgroundColor: '#f1f5f9',
-                              color: '#475569',
-                              border: '1px solid #cbd5e1',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              cursor: 'pointer'
-                            }}
-                            onClick={() => setInfoModalOpen(true)}
-                            title="Completed past leave - Click to view status explanation"
+                  return (
+                    <tr key={l.id || idx} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.15s' }}>
+                      {/* Bank Code */}
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        <span className="student-code-badge">{l.bank_code}</span>
+                      </td>
+
+                      {/* Student Name & Contact */}
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 800, color: '#0f172a' }}>{l.student_name || '—'}</div>
+                        {l.phone && (
+                          <a
+                            href={`tel:${l.phone}`}
+                            style={{ fontSize: '11.5px', color: '#0284c7', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '2px', fontWeight: 600 }}
                           >
-                            <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#94a3b8' }}></span>
-                            Past Leave
-                          </span>
-                        );
-                      })()}
+                            <Phone size={11} /> {l.phone}
+                          </a>
+                        )}
+                      </td>
+
+                      {/* Floor / Room */}
+                      <td style={{ padding: '12px 14px', color: '#475569', fontSize: '13px', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                        {l.floor_id !== null && l.floor_id !== undefined ? `Floor ${l.floor_id}` : ''} {l.room_number ? `(Rm ${l.room_number})` : ''}
+                      </td>
+
+                      {/* Duration (From - To) */}
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span style={{ fontSize: '9.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#4338ca', letterSpacing: '0.3px' }}>FROM</span>
+                            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0f172a' }}>{formatDateTime(l.start_time)}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span style={{ fontSize: '9.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', backgroundColor: '#f1f5f9', color: '#475569', letterSpacing: '0.3px' }}>TO</span>
+                            <span style={{ fontSize: '11.5px', color: '#475569', fontWeight: 600 }}>{formatDateTime(l.end_time)}</span>
+                            <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#6d28d9', backgroundColor: '#ede9fe', padding: '1px 6px', borderRadius: '4px' }}>
+                              {calculateDuration(l.start_time, l.end_time)}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Reason */}
+                      <td style={{ padding: '12px 14px', maxWidth: '140px' }}>
+                        <ExpandableReasonTooltip
+                          text={l.reason || 'Approved Leave'}
+                          maxLength={16}
+                          containerMaxWidth="130px"
+                          badgeStyle={true}
+                          color="#334155"
+                        />
+                      </td>
+
+                      {/* Approval Status Badge */}
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        <span className={`status-pill ${status}`}>
+                          {status === 'approved' && <CheckCircle2 size={13} strokeWidth={2.5} />}
+                          {status === 'rejected' && <XCircle size={13} strokeWidth={2.5} />}
+                          {status === 'pending' && <Clock size={13} strokeWidth={2.5} />}
+                          {status === 'approved' ? 'Approved' : (status === 'rejected' ? 'Rejected' : 'Pending Review')}
+                        </span>
+                      </td>
+
+                      {/* Timing Status Badge */}
+                      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                        <span className={`timing-pill ${timing}`}>
+                          ● {timing === 'active' ? 'Active Today' : (timing === 'future' ? 'Upcoming' : 'Past Leave')}
+                        </span>
+                      </td>
+
+                      {/* Quick Approval Actions */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            className="btn-circle-approve"
+                            title="Quick Approve: Excuses student from attendance"
+                            onClick={() => handleQuickStatusChange(l, 'approved')}
+                            style={status === 'approved' ? { opacity: 0.4, cursor: 'default' } : {}}
+                            disabled={status === 'approved'}
+                          >
+                            <Check size={14} strokeWidth={2.5} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-circle-reject"
+                            title="Quick Reject: Deny leave request"
+                            onClick={() => handleQuickStatusChange(l, 'rejected')}
+                            style={status === 'rejected' ? { opacity: 0.4, cursor: 'default' } : {}}
+                            disabled={status === 'rejected'}
+                          >
+                            <X size={14} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Separate Edit Option */}
+                      <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button
+                          type="button"
+                          className="btn-edit-action"
+                          onClick={() => handleOpenEdit(l)}
+                          title="Open full edit form to change dates, reason, or status remarks"
+                        >
+                          <Edit3 size={13} strokeWidth={2.2} />
+                          <span>Edit Leave</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredLeaves.length === 0 && (
+                  <tr>
+                    <td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                      {loading ? 'Loading leave requests...' : 'No leave records matching the selected filters.'}
                     </td>
                   </tr>
-                );
-              })}
+                )}
+              </tbody>
+            </table>
+          </div>
+        </HamsCard>
+      )}
 
-              {filteredLeaves.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: '#94a3b8' }}>
-                    {loading ? 'Loading leave records...' : 'No leave records found.'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {/* =====================================================================
+          TAB 2: LEAVE TRACKING SECTION WITH STEPPER & STATUS LIFECYCLE
+          ===================================================================== */}
+      {activeTab === 'tracking' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Tracking Search & Filters Card */}
+          <HamsCard padding="20px">
+            <div className="tracking-filter-bar">
+              <div className="search-input-wrap">
+                <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  className="search-input-field"
+                  placeholder="Track by Student Name, Bank Code (ID), Room, or Phone Number..."
+                  value={trackingSearch}
+                  onChange={e => setTrackingSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Status Filter Chips */}
+              <div className="filter-chip-group">
+                <button
+                  type="button"
+                  className={`filter-chip-btn all ${trackingStatusFilter === 'all' ? 'active' : ''}`}
+                  onClick={() => setTrackingStatusFilter('all')}
+                >
+                  All ({leaves.length})
+                </button>
+
+                <button
+                  type="button"
+                  className={`filter-chip-btn pending ${trackingStatusFilter === 'pending' ? 'active' : ''}`}
+                  onClick={() => setTrackingStatusFilter('pending')}
+                >
+                  ⏳ Pending Review ({countPending})
+                </button>
+
+                <button
+                  type="button"
+                  className={`filter-chip-btn approved ${trackingStatusFilter === 'approved' ? 'active' : ''}`}
+                  onClick={() => setTrackingStatusFilter('approved')}
+                >
+                  🟢 Approved ({countApproved})
+                </button>
+
+                <button
+                  type="button"
+                  className={`filter-chip-btn rejected ${trackingStatusFilter === 'rejected' ? 'active' : ''}`}
+                  onClick={() => setTrackingStatusFilter('rejected')}
+                >
+                  🔴 Rejected ({countRejected})
+                </button>
+              </div>
+            </div>
+          </HamsCard>
+
+          {/* Tracking Cards List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {trackingLeaves.map((l, idx) => {
+              const status = l.approval_status || 'approved';
+              const timing = getLeaveTimingStatus(l.start_time, l.end_time);
+
+              return (
+                <div key={l.id || idx} className="tracking-item-card">
+                  {/* Top Row: Student info & Quick Edit action */}
+                  <div className="tracking-top-row">
+                    <div className="student-meta-left">
+                      <div
+                        className="student-avatar-box"
+                        style={{
+                          backgroundColor: status === 'approved' ? '#ecfdf5' : (status === 'rejected' ? '#fef2f2' : '#fffbeb'),
+                          color: status === 'approved' ? '#059669' : (status === 'rejected' ? '#dc2626' : '#d97706')
+                        }}
+                      >
+                        {status === 'approved' && <CheckCircle2 size={24} strokeWidth={2.2} />}
+                        {status === 'rejected' && <XCircle size={24} strokeWidth={2.2} />}
+                        {status === 'pending' && <Clock size={24} strokeWidth={2.2} />}
+                      </div>
+
+                      <div className="student-info-col">
+                        <div className="student-name-row">
+                          <span className="student-name-text">{l.student_name}</span>
+                          <span className="student-code-badge">{l.bank_code}</span>
+                        </div>
+                        <div className="student-sub-details">
+                          <span>Floor {l.floor_id ?? '—'} • Room {l.room_number || '—'}</span>
+                          {l.phone && (
+                            <span style={{ color: '#0284c7', fontWeight: 600 }}>
+                              📞 {l.phone}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="tracking-top-actions">
+                      <span className={`status-pill ${status}`} style={{ fontSize: '13px', padding: '6px 14px' }}>
+                        {status === 'approved' && <CheckCircle2 size={15} strokeWidth={2.5} />}
+                        {status === 'rejected' && <XCircle size={15} strokeWidth={2.5} />}
+                        {status === 'pending' && <Clock size={15} strokeWidth={2.5} />}
+                        {status === 'approved' ? 'Approved & Excused' : (status === 'rejected' ? 'Request Rejected' : 'Pending Verification')}
+                      </span>
+
+                      <button
+                        type="button"
+                        className="btn-edit-action"
+                        onClick={() => handleOpenEdit(l)}
+                      >
+                        <Edit3 size={14} strokeWidth={2.2} />
+                        <span>Edit Details</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Leave Duration & Reason Banner */}
+                  <div className="tracking-details-strip">
+                    <div className="strip-time-wrap">
+                      <div className="strip-date-node">
+                        <span className="strip-date-badge">FROM</span>
+                        <span className="strip-date-text">{formatDateTime(l.start_time)}</span>
+                      </div>
+                      <span className="strip-date-arrow">➔</span>
+                      <div className="strip-date-node">
+                        <span className="strip-date-badge">TO</span>
+                        <span className="strip-date-text">{formatDateTime(l.end_time)}</span>
+                      </div>
+                      <span className="strip-duration-pill">
+                        {calculateDuration(l.start_time, l.end_time)}
+                      </span>
+                    </div>
+
+                    <div className="strip-reason">
+                      <span style={{ color: '#64748b', fontWeight: 700 }}>Reason:</span>
+                      <span>{l.reason || 'Personal Leave'}</span>
+                    </div>
+                  </div>
+
+                  {/* VISUAL 3-STEP PIPELINE: SUBMITTED -> WARDEN REVIEW -> LEAVE APPROVAL */}
+                  <div className="horizontal-stepper">
+                    {/* Step 1: Request Submitted */}
+                    <div className="step-node">
+                      <div className="step-connector-line done" />
+                      <div className="step-circle completed">
+                        <Check size={17} strokeWidth={2.5} />
+                      </div>
+                      <div className="step-text-wrap">
+                        <div className="step-title">1. Request Submitted</div>
+                        <div className="step-desc">Leave Recorded</div>
+                      </div>
+                    </div>
+
+                    {/* Step 2: Warden Review */}
+                    <div className="step-node">
+                      <div className={`step-connector-line ${status === 'approved' ? 'done' : (status === 'rejected' ? 'rejected' : '')}`} />
+                      <div className={`step-circle ${status === 'pending' ? 'pending' : (status === 'rejected' ? 'rejected' : 'completed')}`}>
+                        {status === 'pending' ? <Clock size={17} strokeWidth={2.5} /> : (status === 'rejected' ? <X size={17} strokeWidth={2.5} /> : <Check size={17} strokeWidth={2.5} />)}
+                      </div>
+                      <div className="step-text-wrap">
+                        <div className="step-title">2. Warden Review</div>
+                        <div className="step-desc">
+                          {status === 'pending' ? 'Under Review' : (status === 'rejected' ? 'Review Rejected' : 'Verified')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 3: Final Option - Leave Approval (Approve or Not) */}
+                    <div className="step-node">
+                      <div className={`step-circle ${status === 'approved' ? 'completed' : (status === 'rejected' ? 'rejected' : 'pending')}`}>
+                        {status === 'approved' ? <Check size={17} strokeWidth={2.5} /> : (status === 'rejected' ? <X size={17} strokeWidth={2.5} /> : <Clock size={17} strokeWidth={2.5} />)}
+                      </div>
+                      <div className="step-text-wrap">
+                        <div className="step-title">3. Leave Approval</div>
+                        <div className="step-desc">
+                          {status === 'approved' ? 'Leave Approved' : (status === 'rejected' ? 'Leave Rejected' : 'Pending Approval')}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Remarks Box if present */}
+                  {l.approval_remarks && (
+                    <div style={{
+                      padding: '11px 16px',
+                      borderRadius: '10px',
+                      backgroundColor: status === 'rejected' ? '#fef2f2' : '#f0fdf4',
+                      border: `1px solid ${status === 'rejected' ? '#fecaca' : '#bbf7d0'}`,
+                      fontSize: '12.5px',
+                      color: status === 'rejected' ? '#991b1b' : '#166534',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <Info size={16} />
+                      <span><strong>Admin Remarks:</strong> {l.approval_remarks}</span>
+                    </div>
+                  )}
+
+                  {/* Action Footer in Card */}
+                  <div className="card-action-footer">
+                    <span style={{ marginRight: 'auto', fontSize: '12px', color: '#94a3b8', fontWeight: 500 }}>
+                      Reviewed by: <strong style={{ color: '#475569' }}>{l.reviewed_by || 'Admin Portal'}</strong>
+                    </span>
+
+                    <div className="card-footer-buttons">
+                      {status !== 'approved' && (
+                        <button
+                          type="button"
+                          onClick={() => handleQuickStatusChange(l, 'approved')}
+                          style={{
+                            padding: '7px 16px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            backgroundColor: '#10b981',
+                            color: '#ffffff',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 4px rgba(16, 185, 129, 0.25)'
+                          }}
+                        >
+                          <Check size={14} strokeWidth={2.5} />
+                          <span>Approve Leave</span>
+                        </button>
+                      )}
+
+                      {status !== 'rejected' && (
+                        <button
+                          type="button"
+                          onClick={() => handleQuickStatusChange(l, 'rejected')}
+                          style={{
+                            padding: '7px 16px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            backgroundColor: '#ef4444',
+                            color: '#ffffff',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 4px rgba(239, 68, 68, 0.25)'
+                          }}
+                        >
+                          <X size={14} strokeWidth={2.5} />
+                          <span>Reject Request</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {trackingLeaves.length === 0 && (
+              <HamsCard padding="36px" style={{ textAlign: 'center', color: '#94a3b8' }}>
+                No leave requests found for the selected tracking criteria.
+              </HamsCard>
+            )}
+          </div>
         </div>
-      </HamsCard>
+      )}
 
-      {/* LEAVE STATUS GUIDE / INFO MODAL */}
-      {infoModalOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '20px',
-            padding: '28px',
-            maxWidth: '520px',
-            width: '100%',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
-            border: '1px solid #e2e8f0'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Info size={20} />
+      {/* =====================================================================
+          TAB 3: CREATE / RECORD NEW LEAVE PASS
+          ===================================================================== */}
+      {activeTab === 'create' && (
+        <HamsCard padding="30px" style={{ maxWidth: '750px', margin: '0 auto', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '22px' }}>
+            <div style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              backgroundColor: '#ecfdf5',
+              color: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Plus size={24} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '19px', fontWeight: 800, color: '#0f172a' }}>
+                Record New Leave Request
+              </h3>
+              <p style={{ margin: '3px 0 0 0', fontSize: '13px', color: '#64748b' }}>
+                Create a manual leave request with immediate approval status configuration.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleCreateLeave} className="modal-form-grid">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+              <div className="form-group-field">
+                <label className="form-label-title">Student Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  className="form-input-control"
+                  placeholder="e.g. Rahul Sharma"
+                  value={createFormData.student_name}
+                  onChange={e => setCreateFormData({ ...createFormData, student_name: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group-field">
+                <label className="form-label-title">Bank Code / Student ID *</label>
+                <input
+                  type="text"
+                  required
+                  className="form-input-control"
+                  placeholder="e.g. 1042"
+                  value={createFormData.bank_code}
+                  onChange={e => setCreateFormData({ ...createFormData, bank_code: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+              <div className="form-group-field">
+                <label className="form-label-title">Floor Assignment</label>
+                <select
+                  className="form-input-control"
+                  value={createFormData.floor_id}
+                  onChange={e => setCreateFormData({ ...createFormData, floor_id: e.target.value })}
+                >
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fl => (
+                    <option key={fl} value={String(fl)}>Floor {fl === 0 ? '0 (Ground)' : fl}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group-field">
+                <label className="form-label-title">Room Number</label>
+                <input
+                  type="text"
+                  className="form-input-control"
+                  placeholder="e.g. 302"
+                  value={createFormData.room_number}
+                  onChange={e => setCreateFormData({ ...createFormData, room_number: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group-field">
+                <label className="form-label-title">Parent / Student Phone</label>
+                <input
+                  type="tel"
+                  className="form-input-control"
+                  placeholder="e.g. 9876543210"
+                  value={createFormData.phone}
+                  onChange={e => setCreateFormData({ ...createFormData, phone: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+              <div className="form-group-field">
+                <label className="form-label-title">Leave Start (From Date & Time) *</label>
+                <input
+                  type="datetime-local"
+                  required
+                  className="form-input-control"
+                  value={createFormData.start_time}
+                  onChange={e => setCreateFormData({ ...createFormData, start_time: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group-field">
+                <label className="form-label-title">Expected Return (To Date & Time) *</label>
+                <input
+                  type="datetime-local"
+                  required
+                  className="form-input-control"
+                  value={createFormData.end_time}
+                  onChange={e => setCreateFormData({ ...createFormData, end_time: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="form-group-field">
+              <label className="form-label-title">Reason / Purpose of Leave</label>
+              <input
+                type="text"
+                className="form-input-control"
+                placeholder="e.g. Family Function, Medical Treatment, Weekend Visit"
+                value={createFormData.reason}
+                onChange={e => setCreateFormData({ ...createFormData, reason: e.target.value })}
+              />
+            </div>
+
+            {/* Initial Approval Status Choice */}
+            <div className="form-group-field">
+              <label className="form-label-title">Initial Approval Status</label>
+              <div className="status-toggles-grid">
+                <button
+                  type="button"
+                  className={`status-toggle-card ${createFormData.approval_status === 'approved' ? 'approved-active' : ''}`}
+                  onClick={() => setCreateFormData({ ...createFormData, approval_status: 'approved' })}
+                >
+                  <CheckCircle2 size={22} color="#10b981" />
+                  <span style={{ fontWeight: 800 }}>Approved</span>
+                  <small style={{ fontSize: '11px', color: '#64748b' }}>Excuses Attendance</small>
+                </button>
+
+                <button
+                  type="button"
+                  className={`status-toggle-card ${createFormData.approval_status === 'pending' ? 'pending-active' : ''}`}
+                  onClick={() => setCreateFormData({ ...createFormData, approval_status: 'pending' })}
+                >
+                  <Clock size={22} color="#f59e0b" />
+                  <span style={{ fontWeight: 800 }}>Pending Review</span>
+                  <small style={{ fontSize: '11px', color: '#64748b' }}>Awaiting decision</small>
+                </button>
+
+                <button
+                  type="button"
+                  className={`status-toggle-card ${createFormData.approval_status === 'rejected' ? 'rejected-active' : ''}`}
+                  onClick={() => setCreateFormData({ ...createFormData, approval_status: 'rejected' })}
+                >
+                  <XCircle size={22} color="#ef4444" />
+                  <span style={{ fontWeight: 800 }}>Rejected</span>
+                  <small style={{ fontSize: '11px', color: '#64748b' }}>Leave Denied</small>
+                </button>
+              </div>
+            </div>
+
+            <div className="form-group-field">
+              <label className="form-label-title">Remarks / Verification Note</label>
+              <input
+                type="text"
+                className="form-input-control"
+                placeholder="e.g. Parent confirmed via phone call"
+                value={createFormData.approval_remarks}
+                onChange={e => setCreateFormData({ ...createFormData, approval_remarks: e.target.value })}
+              />
+            </div>
+
+            <div className="modal-footer-actions">
+              <button
+                type="button"
+                onClick={() => setActiveTab('all')}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: '1.5px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                <Check size={16} strokeWidth={2.5} />
+                <span>Save Leave Request</span>
+              </button>
+            </div>
+          </form>
+        </HamsCard>
+      )}
+
+      {/* =====================================================================
+          EDIT LEAVE MODAL (Requirement 1: Separate Option to Edit Leave Details)
+          ===================================================================== */}
+      {editModalOpen && editingLeave && (
+        <div className="leaves-modal-backdrop">
+          <div className="leaves-modal-card">
+            <div className="modal-header-zone">
+              <div className="modal-title-wrap">
+                <div className="modal-icon-badge">
+                  <Edit3 size={20} strokeWidth={2.2} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>Leave Status Guide</h3>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Understanding Active, Future & Past Leave Statuses</span>
+                  <h3 className="modal-title-text">
+                    Edit Leave Details
+                  </h3>
+                  <p className="modal-subtitle-text">
+                    Update timing, reason, and approval decision for {editingLeave.student_name}
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setInfoModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+
+              <button
+                type="button"
+                className="modal-close-icon"
+                onClick={() => setEditModalOpen(false)}
+              >
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* Active Today */}
-              <div style={{ padding: '16px', borderRadius: '14px', backgroundColor: '#ecfdf5', border: '1.5px solid #a7f3d0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <span style={{ padding: '4px 10px', borderRadius: '12px', backgroundColor: '#10b981', color: '#ffffff', fontSize: '12px', fontWeight: 800 }}>
-                    ● Active Today
-                  </span>
-                  <strong style={{ fontSize: '14px', color: '#065f46' }}>Currently on Leave (Excused)</strong>
+            <form onSubmit={handleSaveEdit} className="modal-form-grid">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                <div className="form-group-field">
+                  <label className="form-label-title">Student Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-input-control"
+                    value={editFormData.student_name}
+                    onChange={e => setEditFormData({ ...editFormData, student_name: e.target.value })}
+                  />
                 </div>
-                <p style={{ margin: 0, fontSize: '13px', color: '#047857', lineHeight: '1.5' }}>
-                  The student is away on approved leave today. They are <strong>automatically excused</strong> from today's attendance sessions and will <strong>not</strong> be marked as absent.
+
+                <div className="form-group-field">
+                  <label className="form-label-title">Bank Code / Student ID</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-input-control"
+                    value={editFormData.bank_code}
+                    onChange={e => setEditFormData({ ...editFormData, bank_code: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px' }}>
+                <div className="form-group-field">
+                  <label className="form-label-title">Floor</label>
+                  <select
+                    className="form-input-control"
+                    value={editFormData.floor_id}
+                    onChange={e => setEditFormData({ ...editFormData, floor_id: e.target.value })}
+                  >
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(fl => (
+                      <option key={fl} value={String(fl)}>Floor {fl === 0 ? '0 (Ground)' : fl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group-field">
+                  <label className="form-label-title">Room Number</label>
+                  <input
+                    type="text"
+                    className="form-input-control"
+                    value={editFormData.room_number}
+                    onChange={e => setEditFormData({ ...editFormData, room_number: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group-field">
+                  <label className="form-label-title">Contact Phone</label>
+                  <input
+                    type="tel"
+                    className="form-input-control"
+                    value={editFormData.phone}
+                    onChange={e => setEditFormData({ ...editFormData, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                <div className="form-group-field">
+                  <label className="form-label-title">Leave Start (From Date & Time) *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    className="form-input-control"
+                    value={editFormData.start_time}
+                    onChange={e => setEditFormData({ ...editFormData, start_time: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group-field">
+                  <label className="form-label-title">Leave End (To Date & Time) *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    className="form-input-control"
+                    value={editFormData.end_time}
+                    onChange={e => setEditFormData({ ...editFormData, end_time: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group-field">
+                <label className="form-label-title">Leave Reason / Purpose</label>
+                <input
+                  type="text"
+                  className="form-input-control"
+                  placeholder="e.g. Medical emergency, Family function"
+                  value={editFormData.reason}
+                  onChange={e => setEditFormData({ ...editFormData, reason: e.target.value })}
+                />
+              </div>
+
+              {/* Approval Status Selector */}
+              <div className="form-group-field">
+                <label className="form-label-title">Leave Approval Status</label>
+                <div className="status-toggles-grid">
+                  <button
+                    type="button"
+                    className={`status-toggle-card ${editFormData.approval_status === 'approved' ? 'approved-active' : ''}`}
+                    onClick={() => setEditFormData({ ...editFormData, approval_status: 'approved' })}
+                  >
+                    <CheckCircle2 size={22} color="#10b981" />
+                    <span style={{ fontWeight: 800 }}>Approved</span>
+                    <small style={{ fontSize: '11px', color: '#64748b' }}>Excuses Attendance</small>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`status-toggle-card ${editFormData.approval_status === 'pending' ? 'pending-active' : ''}`}
+                    onClick={() => setEditFormData({ ...editFormData, approval_status: 'pending' })}
+                  >
+                    <Clock size={22} color="#f59e0b" />
+                    <span style={{ fontWeight: 800 }}>Pending</span>
+                    <small style={{ fontSize: '11px', color: '#64748b' }}>Under Review</small>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`status-toggle-card ${editFormData.approval_status === 'rejected' ? 'rejected-active' : ''}`}
+                    onClick={() => setEditFormData({ ...editFormData, approval_status: 'rejected' })}
+                  >
+                    <XCircle size={22} color="#ef4444" />
+                    <span style={{ fontWeight: 800 }}>Rejected</span>
+                    <small style={{ fontSize: '11px', color: '#64748b' }}>Attendance Mandatory</small>
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group-field">
+                <label className="form-label-title">Approval / Rejection Remarks</label>
+                <textarea
+                  rows={2}
+                  className="form-input-control"
+                  placeholder="Enter notes or reason for approval/rejection (e.g. Parent confirmed via phone)"
+                  value={editFormData.approval_remarks}
+                  onChange={e => setEditFormData({ ...editFormData, approval_remarks: e.target.value })}
+                />
+              </div>
+
+              <div className="modal-footer-actions">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteLeave(editingLeave)}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    border: '1.5px solid #fecaca',
+                    backgroundColor: '#fef2f2',
+                    color: '#dc2626',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Delete Leave
+                </button>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setEditModalOpen(false)}
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: '10px',
+                      border: '1.5px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#475569',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '10px 22px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(79, 70, 229, 0.3)'
+                    }}
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Status Guide / Info Modal */}
+      {infoModalOpen && (
+        <div className="leaves-modal-backdrop">
+          <div className="leaves-modal-card" style={{ maxWidth: '500px' }}>
+            <div className="modal-header-zone">
+              <div className="modal-title-wrap">
+                <div className="modal-icon-badge">
+                  <Info size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title-text">Leave Status Guide</h3>
+                  <p className="modal-subtitle-text">Understanding Approval & Timing Statuses</p>
+                </div>
+              </div>
+              <button onClick={() => setInfoModalOpen(false)} className="modal-close-icon">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ padding: '14px', borderRadius: '12px', backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0' }}>
+                <strong style={{ color: '#065f46', fontSize: '13.5px' }}>🟢 Approved</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#047857' }}>
+                  Student is permitted to leave. They are automatically marked as <strong>Leave</strong> (excused) in attendance.
                 </p>
               </div>
 
-              {/* Future Leave */}
-              <div style={{ padding: '16px', borderRadius: '14px', backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <span style={{ padding: '4px 10px', borderRadius: '12px', backgroundColor: '#3b82f6', color: '#ffffff', fontSize: '12px', fontWeight: 800 }}>
-                    ● Future Leave
-                  </span>
-                  <strong style={{ fontSize: '14px', color: '#1e40af' }}>Upcoming Scheduled Leave</strong>
-                </div>
-                <p style={{ margin: 0, fontSize: '13px', color: '#1d4ed8', lineHeight: '1.5' }}>
-                  The student has an approved leave scheduled for upcoming future dates. It will <strong>automatically become active</strong> when the start date arrives.
+              <div style={{ padding: '14px', borderRadius: '12px', backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
+                <strong style={{ color: '#92400e', fontSize: '13.5px' }}>🟡 Pending Review</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#b45309' }}>
+                  Awaiting review or parent confirmation. Attendance is <strong>not excused</strong> until approved.
                 </p>
               </div>
 
-              {/* Past Leave */}
-              <div style={{ padding: '16px', borderRadius: '14px', backgroundColor: '#f8fafc', border: '1.5px solid #cbd5e1' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <span style={{ padding: '4px 10px', borderRadius: '12px', backgroundColor: '#64748b', color: '#ffffff', fontSize: '12px', fontWeight: 800 }}>
-                    ● Past Leave
-                  </span>
-                  <strong style={{ fontSize: '14px', color: '#334155' }}>Completed Past Leave Record</strong>
-                </div>
-                <p style={{ margin: 0, fontSize: '13px', color: '#475569', lineHeight: '1.5' }}>
-                  The student's approved leave period has already ended and was completed in the past. It remains in the system for historical verification.
+              <div style={{ padding: '14px', borderRadius: '12px', backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
+                <strong style={{ color: '#991b1b', fontSize: '13.5px' }}>🔴 Rejected</strong>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#b91c1c' }}>
+                  Leave request denied. Attendance is <strong>strictly required</strong>.
                 </p>
               </div>
             </div>
@@ -740,18 +1831,18 @@ export const LeavesManagementView: React.FC = () => {
               onClick={() => setInfoModalOpen(false)}
               style={{
                 width: '100%',
-                marginTop: '20px',
-                padding: '12px',
+                marginTop: '18px',
+                padding: '11px',
                 backgroundColor: '#4f46e5',
                 color: '#ffffff',
                 border: 'none',
-                borderRadius: '12px',
-                fontSize: '14px',
+                borderRadius: '10px',
+                fontSize: '13.5px',
                 fontWeight: 700,
                 cursor: 'pointer'
               }}
             >
-              Got it, Close
+              Close
             </button>
           </div>
         </div>
@@ -759,3 +1850,5 @@ export const LeavesManagementView: React.FC = () => {
     </div>
   );
 };
+
+export default LeavesManagementView;

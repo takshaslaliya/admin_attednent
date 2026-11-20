@@ -102,8 +102,14 @@ export const AdminLayout: React.FC = () => {
     if (p === '/security') {
       return { title: 'Proxy & Multi-Account Security Audit', subtitle: 'Detect and resolve cross-student logins from same IP / Device' };
     }
-    if (p === '/leaves') {
-      return { title: 'Approved Leave Management', subtitle: 'Sync and track college approved leaves and auto-excused attendance' };
+    if (p === '/leaves' || p === '/leave-tracking' || p === '/leaves/track' || p === '/leave-apply' || p === '/leaves/new') {
+      if (p === '/leave-tracking' || p === '/leaves/track') {
+        return { title: 'Leave Tracking Portal', subtitle: 'Check live status of student leave requests (Pending, Approved, Rejected)' };
+      }
+      if (p === '/leave-apply' || p === '/leaves/new') {
+        return { title: 'Record New Leave Request', subtitle: 'Submit a new student leave request with instant approval status assignment' };
+      }
+      return { title: 'Leave Section Management', subtitle: 'Edit leave details, review approval status (Approved / Rejected) & track live requests' };
     }
     if (p === '/session_add' || p === '/add_session') {
       return { title: 'Create Session', subtitle: 'Add a new dynamic attendance schedule' };
@@ -159,7 +165,11 @@ export const AdminLayout: React.FC = () => {
             <Route path="/forms/:formId/report" element={<FormAnalyticsDetailView />} />
             <Route path="/recycle-bin" element={!isLeader ? <RecycleBinView /> : <Navigate to="/" replace />} />
             <Route path="/data-recovery" element={!isLeader ? <RecycleBinView /> : <Navigate to="/" replace />} />
-            <Route path="/leaves" element={<LeavesManagementView />} />
+            <Route path="/leaves" element={<LeavesManagementView initialTab="all" />} />
+            <Route path="/leave-tracking" element={<LeavesManagementView initialTab="tracking" />} />
+            <Route path="/leaves/track" element={<LeavesManagementView initialTab="tracking" />} />
+            <Route path="/leave-apply" element={<LeavesManagementView initialTab="create" />} />
+            <Route path="/leaves/new" element={<LeavesManagementView initialTab="create" />} />
             <Route path="/security" element={<DeviceSecurityView />} />
             <Route path="/sessions" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
             <Route path="/session-management" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
