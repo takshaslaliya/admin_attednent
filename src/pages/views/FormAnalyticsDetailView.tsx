@@ -379,7 +379,7 @@ export const FormAnalyticsDetailView: React.FC = () => {
                             className="option-progress-fill" 
                             style={{ 
                               width: `${optItem.percentage}%`,
-                              backgroundColor: idx % 4 === 0 ? '#3b82f6' : idx % 4 === 1 ? '#8b5cf6' : idx % 4 === 2 ? '#10b981' : '#f59e0b'
+                              backgroundColor: idx % 4 === 0 ? '#2A9D8F' : idx % 4 === 1 ? '#7B73D1' : idx % 4 === 2 ? '#E09F3E' : '#4361EE'
                             }}
                           ></div>
                         </div>

@@ -287,27 +287,27 @@
 }
 
 .chart-series-pill.active.present {
-  border-color: #818cf8;
-  background: #eef2ff;
-  color: #3730a3;
+  border-color: #a7ded7;
+  background: #e6f5f3;
+  color: #1d6b61;
 }
 
 .chart-series-pill.active.absent {
-  border-color: #fca5a5;
-  background: #fef2f2;
-  color: #991b1b;
+  border-color: #f5b6a7;
+  background: #fdf1ee;
+  color: #a6422b;
 }
 
 .chart-series-pill.active.late {
-  border-color: #fcd34d;
-  background: #fffbeb;
-  color: #92400e;
+  border-color: #f4d49b;
+  background: #fdf6ea;
+  color: #92580c;
 }
 
 .chart-series-pill.active.leave {
-  border-color: #7dd3fc;
-  background: #f0f9ff;
-  color: #0369a1;
+  border-color: #c2beef;
+  background: #f2f1fa;
+  color: #4a4199;
 }
 
 .chart-series-pill:not(.active) {

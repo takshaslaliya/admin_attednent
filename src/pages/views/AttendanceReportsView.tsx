@@ -1232,8 +1232,8 @@ export const AttendanceReportsView: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // Donut chart colors: On-Time, Late, Absent, On Leave
-  const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#0ea5e9'];
+  // Donut chart colors: On-Time, Late, Absent, On Leave (English designer palette)
+  const PIE_COLORS = ['#2A9D8F', '#E09F3E', '#E76F51', '#7B73D1'];
 
   const punctualityData = summary
     ? [
@@ -1789,7 +1789,7 @@ export const AttendanceReportsView: React.FC = () => {
                   onClick={() => setChartSeries((p) => ({ ...p, present: !p.present }))}
                   title="Toggle Present line"
                 >
-                  <span className="dot" style={{ background: '#4f46e5' }}></span>
+                  <span className="dot" style={{ background: '#2A9D8F' }}></span>
                   <span>Present</span>
                 </button>
                 <button
@@ -1798,7 +1798,7 @@ export const AttendanceReportsView: React.FC = () => {
                   onClick={() => setChartSeries((p) => ({ ...p, absent: !p.absent }))}
                   title="Toggle Absent line"
                 >
-                  <span className="dot" style={{ background: '#f43f5e' }}></span>
+                  <span className="dot" style={{ background: '#E76F51' }}></span>
                   <span>Absent</span>
                 </button>
                 <button
@@ -1807,7 +1807,7 @@ export const AttendanceReportsView: React.FC = () => {
                   onClick={() => setChartSeries((p) => ({ ...p, late: !p.late }))}
                   title="Toggle Late Arrivals line"
                 >
-                  <span className="dot" style={{ background: '#f59e0b' }}></span>
+                  <span className="dot" style={{ background: '#E09F3E' }}></span>
                   <span>Late</span>
                 </button>
                 <button
@@ -1816,7 +1816,7 @@ export const AttendanceReportsView: React.FC = () => {
                   onClick={() => setChartSeries((p) => ({ ...p, leave: !p.leave }))}
                   title="Toggle Approved Leave line"
                 >
-                  <span className="dot" style={{ background: '#0ea5e9' }}></span>
+                  <span className="dot" style={{ background: '#7B73D1' }}></span>
                   <span>Leave</span>
                 </button>
               </div>
@@ -1827,40 +1827,40 @@ export const AttendanceReportsView: React.FC = () => {
                 <AreaChart data={summary.daily_trends}>
                   <defs>
                     <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.02} />
+                      <stop offset="5%" stopColor="#2A9D8F" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#2A9D8F" stopOpacity={0.02} />
                     </linearGradient>
                     <linearGradient id="colorAbsent" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.02} />
+                      <stop offset="5%" stopColor="#E76F51" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#E76F51" stopOpacity={0.02} />
                     </linearGradient>
                     <linearGradient id="colorLate" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.02} />
+                      <stop offset="5%" stopColor="#E09F3E" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#E09F3E" stopOpacity={0.02} />
                     </linearGradient>
                     <linearGradient id="colorLeave" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.02} />
+                      <stop offset="5%" stopColor="#7B73D1" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#7B73D1" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" vertical={false} opacity={0.7} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
                   <Tooltip
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                    contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.08)' }}
                   />
                   <Legend />
                   {chartSeries.present && (
-                    <Area type="monotone" dataKey="present" stroke="#4f46e5" strokeWidth={2.5} fillOpacity={1} fill="url(#colorPresent)" name="Present" />
+                    <Area type="monotone" dataKey="present" stroke="#2A9D8F" strokeWidth={2.5} fillOpacity={1} fill="url(#colorPresent)" name="Present" />
                   )}
                   {chartSeries.absent && (
-                    <Area type="monotone" dataKey="absent" stroke="#f43f5e" strokeWidth={2.5} fillOpacity={1} fill="url(#colorAbsent)" name="Absent" />
+                    <Area type="monotone" dataKey="absent" stroke="#E76F51" strokeWidth={2.5} fillOpacity={1} fill="url(#colorAbsent)" name="Absent" />
                   )}
                   {chartSeries.late && (
-                    <Area type="monotone" dataKey="late" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorLate)" name="Late Arrivals" />
+                    <Area type="monotone" dataKey="late" stroke="#E09F3E" strokeWidth={2.2} fillOpacity={1} fill="url(#colorLate)" name="Late Arrivals" />
                   )}
                   {chartSeries.leave && (
-                    <Area type="monotone" dataKey="leave" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorLeave)" name="On Leave" />
+                    <Area type="monotone" dataKey="leave" stroke="#7B73D1" strokeWidth={2.2} fillOpacity={1} fill="url(#colorLeave)" name="On Leave" />
                   )}
                 </AreaChart>
               </ResponsiveContainer>
@@ -1885,11 +1885,21 @@ export const AttendanceReportsView: React.FC = () => {
                     paddingAngle={3}
                     dataKey="value"
                   >
-                    {punctualityData.map((_entry, index) => (
-                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    {punctualityData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={
+                          entry.name === 'On-Time' ? '#2A9D8F' :
+                          entry.name === 'Late' ? '#E09F3E' :
+                          entry.name === 'Absent' ? '#E76F51' :
+                          '#7B73D1'
+                        }
+                      />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.08)' }}
+                  />
                   <Legend verticalAlign="bottom" height={36} />
                 </PieChart>
               </ResponsiveContainer>

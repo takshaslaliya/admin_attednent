@@ -672,81 +672,81 @@ export const DashboardOverview: React.FC = () => {
         </HamsCard>
 
         {/* Present Today */}
-        <HamsCard padding="20px" style={{ borderLeft: '4px solid #10b981' }}>
+        <HamsCard padding="20px" style={{ borderLeft: '4px solid #2A9D8F' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>
                 PRESENT TODAY
               </span>
-              <span style={{ fontSize: '30px', fontWeight: 800, color: '#10b981' }}>
+              <span style={{ fontSize: '30px', fontWeight: 800, color: '#2A9D8F' }}>
                 {stats?.present_today || 0}
               </span>
             </div>
-            <div style={{ padding: '10px', backgroundColor: '#ecfdf5', borderRadius: '12px', color: '#10b981' }}>
+            <div style={{ padding: '10px', backgroundColor: '#e6f5f3', borderRadius: '12px', color: '#2A9D8F' }}>
               <CheckCircle2 size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 600, marginTop: '10px' }}>
+          <div style={{ fontSize: '12px', color: '#2A9D8F', fontWeight: 600, marginTop: '10px' }}>
             In {currentSessionName} (Live)
           </div>
         </HamsCard>
 
         {/* Late Today */}
-        <HamsCard padding="20px" style={{ borderLeft: '4px solid #f59e0b' }}>
+        <HamsCard padding="20px" style={{ borderLeft: '4px solid #E09F3E' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>
                 LATE TODAY
               </span>
-              <span style={{ fontSize: '30px', fontWeight: 800, color: '#f59e0b' }}>
+              <span style={{ fontSize: '30px', fontWeight: 800, color: '#E09F3E' }}>
                 {stats?.late_today || 0}
               </span>
             </div>
-            <div style={{ padding: '10px', backgroundColor: '#fffbeb', borderRadius: '12px', color: '#f59e0b' }}>
+            <div style={{ padding: '10px', backgroundColor: '#fdf6ea', borderRadius: '12px', color: '#E09F3E' }}>
               <Clock size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600, marginTop: '10px' }}>
+          <div style={{ fontSize: '12px', color: '#E09F3E', fontWeight: 600, marginTop: '10px' }}>
             In {currentSessionName} (Live)
           </div>
         </HamsCard>
 
         {/* Leave Today */}
-        <HamsCard padding="20px" style={{ borderLeft: '4px solid #8b5cf6' }}>
+        <HamsCard padding="20px" style={{ borderLeft: '4px solid #7B73D1' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>
                 LEAVE TODAY
               </span>
-              <span style={{ fontSize: '30px', fontWeight: 800, color: '#8b5cf6' }}>
+              <span style={{ fontSize: '30px', fontWeight: 800, color: '#7B73D1' }}>
                 {stats?.leave_today || 0}
               </span>
             </div>
-            <div style={{ padding: '10px', backgroundColor: '#f5f3ff', borderRadius: '12px', color: '#8b5cf6' }}>
+            <div style={{ padding: '10px', backgroundColor: '#f2f1fa', borderRadius: '12px', color: '#7B73D1' }}>
               <Calendar size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: 600, marginTop: '10px' }}>
+          <div style={{ fontSize: '12px', color: '#7B73D1', fontWeight: 600, marginTop: '10px' }}>
             In {currentSessionName} (Approved)
           </div>
         </HamsCard>
 
         {/* Absent Today */}
-        <HamsCard padding="20px" style={{ borderLeft: '4px solid #ef4444' }}>
+        <HamsCard padding="20px" style={{ borderLeft: '4px solid #E76F51' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '6px' }}>
                 ABSENT TODAY
               </span>
-              <span style={{ fontSize: '30px', fontWeight: 800, color: '#ef4444' }}>
+              <span style={{ fontSize: '30px', fontWeight: 800, color: '#E76F51' }}>
                 {stats?.absent_today || 0}
               </span>
             </div>
-            <div style={{ padding: '10px', backgroundColor: '#fef2f2', borderRadius: '12px', color: '#ef4444' }}>
+            <div style={{ padding: '10px', backgroundColor: '#fdf1ee', borderRadius: '12px', color: '#E76F51' }}>
               <XCircle size={22} />
             </div>
           </div>
-          <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: 600, marginTop: '10px' }}>
+          <div style={{ fontSize: '12px', color: '#E76F51', fontWeight: 600, marginTop: '10px' }}>
             In {currentSessionName} (Live)
           </div>
         </HamsCard>
@@ -769,7 +769,7 @@ export const DashboardOverview: React.FC = () => {
                 Real-time records for <strong>{currentSessionName}</strong>
               </p>
             </div>
-            <BarChart2 size={18} color="#4f46e5" />
+            <BarChart2 size={18} color="#4361ee" />
           </div>
 
           <div style={{ height: '260px', width: '100%' }}>
@@ -779,30 +779,33 @@ export const DashboardOverview: React.FC = () => {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                <BarChart data={chartData} margin={{ top: 12, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" vertical={false} opacity={0.7} />
+                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight={500} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={11} fontWeight={500} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#ffffff',
                       border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                      fontSize: '12px'
+                      borderRadius: '10px',
+                      boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.04)',
+                      fontSize: '12px',
+                      padding: '10px 14px'
                     }}
+                    cursor={{ fill: 'rgba(241, 245, 249, 0.7)' }}
                   />
                   <Legend
                     verticalAlign="top"
                     align="right"
-                    height={26}
+                    height={30}
                     iconType="circle"
-                    wrapperStyle={{ fontSize: '11px', fontWeight: 600, paddingBottom: '6px' }}
+                    iconSize={8}
+                    wrapperStyle={{ fontSize: '11px', fontWeight: 600, paddingBottom: '8px', color: '#475569' }}
                   />
-                  <Bar dataKey="present" name="Present" fill="#10b981" radius={[4, 4, 0, 0]} barSize={10} />
-                  <Bar dataKey="late" name="Late" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={10} />
-                  <Bar dataKey="leave" name="Leave" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={10} />
-                  <Bar dataKey="absent" name="Absent" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={10} />
+                  <Bar dataKey="present" name="Present" fill="#2A9D8F" radius={[6, 6, 0, 0]} barSize={11} />
+                  <Bar dataKey="late" name="Late" fill="#E09F3E" radius={[6, 6, 0, 0]} barSize={11} />
+                  <Bar dataKey="leave" name="Leave" fill="#7B73D1" radius={[6, 6, 0, 0]} barSize={11} />
+                  <Bar dataKey="absent" name="Absent" fill="#E76F51" radius={[6, 6, 0, 0]} barSize={11} />
                 </BarChart>
               </ResponsiveContainer>
             )}
