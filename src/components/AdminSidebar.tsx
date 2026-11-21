@@ -97,7 +97,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
   const isAllLeaves = pathname === '/leaves';
   const isLeaveTracking = pathname === '/leave-tracking' || pathname === '/leaves/track';
-  const isLeaveApply = pathname === '/leave-apply' || pathname === '/leaves/new';
   const isLeavesActive = pathname.startsWith('/leave') || pathname.startsWith('/leaves');
 
   const isStudents = pathname === '/students';
@@ -262,15 +261,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     <span className="subitem-bullet"></span>
                     <Clock size={15} className="subitem-icon" style={{ color: '#0ea5e9' }} />
                     <span>Leave Tracking</span>
-                  </button>
-
-                  <button
-                    className={`nav-subitem-btn ${isLeaveApply ? 'active' : ''}`}
-                    onClick={() => handleNavClick('/leave-apply')}
-                  >
-                    <span className="subitem-bullet"></span>
-                    <PlusCircle size={15} className="subitem-icon" style={{ color: '#10b981' }} />
-                    <span>Record Leave Request</span>
                   </button>
                 </div>
               )}

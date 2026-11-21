@@ -102,12 +102,9 @@ export const AdminLayout: React.FC = () => {
     if (p === '/security') {
       return { title: 'Proxy & Multi-Account Security Audit', subtitle: 'Detect and resolve cross-student logins from same IP / Device' };
     }
-    if (p === '/leaves' || p === '/leave-tracking' || p === '/leaves/track' || p === '/leave-apply' || p === '/leaves/new') {
+    if (p === '/leaves' || p === '/leave-tracking' || p === '/leaves/track') {
       if (p === '/leave-tracking' || p === '/leaves/track') {
-        return { title: 'Leave Tracking Portal', subtitle: 'Check live status of student leave requests (Pending, Approved, Rejected)' };
-      }
-      if (p === '/leave-apply' || p === '/leaves/new') {
-        return { title: 'Record New Leave Request', subtitle: 'Submit a new student leave request with instant approval status assignment' };
+        return { title: 'Leave Tracking Portal', subtitle: 'Verify student leave requests with Warden & Parent verification codes' };
       }
       return { title: 'Leave Section Management', subtitle: 'Edit leave details, review approval status (Approved / Rejected) & track live requests' };
     }
@@ -168,8 +165,8 @@ export const AdminLayout: React.FC = () => {
             <Route path="/leaves" element={<LeavesManagementView initialTab="all" />} />
             <Route path="/leave-tracking" element={<LeavesManagementView initialTab="tracking" />} />
             <Route path="/leaves/track" element={<LeavesManagementView initialTab="tracking" />} />
-            <Route path="/leave-apply" element={<LeavesManagementView initialTab="create" />} />
-            <Route path="/leaves/new" element={<LeavesManagementView initialTab="create" />} />
+            <Route path="/leave-apply" element={<Navigate to="/leave-tracking" replace />} />
+            <Route path="/leaves/new" element={<Navigate to="/leave-tracking" replace />} />
             <Route path="/security" element={<DeviceSecurityView />} />
             <Route path="/sessions" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
             <Route path="/session-management" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
