@@ -127,6 +127,19 @@ export const StudentsManagementView: React.FC = () => {
     '#475569'  // Slate
   ];
 
+  const getRandomColor = () => {
+    const hue = Math.floor(Math.random() * 360);
+    const s = 0.75;
+    const l = 0.46;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n: number) => {
+      const k = (n + hue / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+
   const userRole = admin?.role || 'ADMIN';
 
   useEffect(() => {
@@ -1588,10 +1601,38 @@ export const StudentsManagementView: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  TAG COLOR
-                </label>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                    TAG COLOR
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setNewTagColor(getRandomColor())}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: '#4f46e5',
+                        background: '#eef2ff',
+                        border: '1px solid #c7d2fe',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}
+                      title="Generate a random vibrant color"
+                    >
+                      🎲 Random Color
+                    </button>
+                    <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748b', fontWeight: 600 }}>
+                      {newTagColor}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   {tagColorPalette.map(color => (
                     <button
                       key={color}
@@ -1602,12 +1643,73 @@ export const StudentsManagementView: React.FC = () => {
                         height: '26px',
                         borderRadius: '50%',
                         backgroundColor: color,
-                        border: newTagColor === color ? '3px solid #0f172a' : '2px solid #ffffff',
+                        border: newTagColor.toLowerCase() === color.toLowerCase() ? '3px solid #0f172a' : '2px solid #ffffff',
                         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                         cursor: 'pointer'
                       }}
+                      title={color}
                     />
                   ))}
+
+                  {/* Native Rainbow Custom Color Picker */}
+                  <label
+                    title="Pick custom color from color wheel"
+                    style={{
+                      position: 'relative',
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '50%',
+                      background: 'conic-gradient(from 90deg, #ef4444, #f59e0b, #10b981, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444)',
+                      border: !tagColorPalette.map(c => c.toLowerCase()).includes(newTagColor.toLowerCase()) ? '3px solid #0f172a' : '2px solid #ffffff',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    <input
+                      type="color"
+                      value={newTagColor.startsWith('#') && newTagColor.length === 7 ? newTagColor : '#4f46e5'}
+                      onChange={e => setNewTagColor(e.target.value)}
+                      style={{
+                        opacity: 0,
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#fff', textShadow: '0 0 3px #000', pointerEvents: 'none' }}>+</span>
+                  </label>
+
+                  {/* Direct Hex Code Input */}
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={newTagColor}
+                      onChange={e => {
+                        let val = e.target.value.trim();
+                        if (!val.startsWith('#') && val.length > 0) val = '#' + val;
+                        setNewTagColor(val);
+                      }}
+                      placeholder="#HEX"
+                      maxLength={7}
+                      style={{
+                        width: '74px',
+                        height: '28px',
+                        padding: '2px 6px',
+                        fontSize: '11px',
+                        fontFamily: 'monospace',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        textAlign: 'center'
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1697,10 +1799,38 @@ export const StudentsManagementView: React.FC = () => {
                           </div>
 
                           <div>
-                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                              TAG COLOR
-                            </label>
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>
+                                TAG COLOR
+                              </label>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditTagColor(getRandomColor())}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    padding: '2px 7px',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: '#4f46e5',
+                                    background: '#eef2ff',
+                                    border: '1px solid #c7d2fe',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Generate a random vibrant color"
+                                >
+                                  🎲 Random Color
+                                </button>
+                                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748b', fontWeight: 600 }}>
+                                  {editTagColor}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                               {tagColorPalette.map(color => (
                                 <button
                                   key={color}
@@ -1711,12 +1841,73 @@ export const StudentsManagementView: React.FC = () => {
                                     height: '22px',
                                     borderRadius: '50%',
                                     backgroundColor: color,
-                                    border: editTagColor === color ? '2.5px solid #0f172a' : '2px solid #ffffff',
+                                    border: editTagColor.toLowerCase() === color.toLowerCase() ? '2.5px solid #0f172a' : '2px solid #ffffff',
                                     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                                     cursor: 'pointer'
                                   }}
+                                  title={color}
                                 />
                               ))}
+
+                              {/* Native Rainbow Custom Color Picker */}
+                              <label
+                                title="Pick custom color from color wheel"
+                                style={{
+                                  position: 'relative',
+                                  width: '22px',
+                                  height: '22px',
+                                  borderRadius: '50%',
+                                  background: 'conic-gradient(from 90deg, #ef4444, #f59e0b, #10b981, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444)',
+                                  border: !tagColorPalette.map(c => c.toLowerCase()).includes(editTagColor.toLowerCase()) ? '2.5px solid #0f172a' : '2px solid #ffffff',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                <input
+                                  type="color"
+                                  value={editTagColor.startsWith('#') && editTagColor.length === 7 ? editTagColor : '#4f46e5'}
+                                  onChange={e => setEditTagColor(e.target.value)}
+                                  style={{
+                                    opacity: 0,
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    cursor: 'pointer'
+                                  }}
+                                />
+                                <span style={{ fontSize: '10px', fontWeight: 700, color: '#fff', textShadow: '0 0 2px #000', pointerEvents: 'none' }}>+</span>
+                              </label>
+
+                              {/* Direct Hex Code Input */}
+                              <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '2px' }}>
+                                <input
+                                  type="text"
+                                  value={editTagColor}
+                                  onChange={e => {
+                                    let val = e.target.value.trim();
+                                    if (!val.startsWith('#') && val.length > 0) val = '#' + val;
+                                    setEditTagColor(val);
+                                  }}
+                                  placeholder="#HEX"
+                                  maxLength={7}
+                                  style={{
+                                    width: '68px',
+                                    height: '24px',
+                                    padding: '2px 4px',
+                                    fontSize: '11px',
+                                    fontFamily: 'monospace',
+                                    borderRadius: '4px',
+                                    border: '1px solid #cbd5e1',
+                                    textAlign: 'center'
+                                  }}
+                                />
+                              </div>
                             </div>
                           </div>
 
