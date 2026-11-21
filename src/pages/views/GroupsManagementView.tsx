@@ -1234,7 +1234,7 @@ export const GroupsManagementView: React.FC = () => {
                   type="text"
                   value={studentPickerSearch}
                   onChange={e => setStudentPickerSearch(e.target.value)}
-                  placeholder="Search by name, bank code, room, phone..."
+                  placeholder="Search by name, student ID, room, phone..."
                   style={{ width: '100%', padding: '8px 12px 8px 34px', borderRadius: '9px', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', fontSize: '13px', boxSizing: 'border-box' }}
                 />
               </div>

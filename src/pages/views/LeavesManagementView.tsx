@@ -360,7 +360,7 @@ export const LeavesManagementView: React.FC = () => {
               <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input
                 type="text"
-                placeholder="Search by Name, Bank Code, Room, Reason..."
+                placeholder="Search by Name, Student ID, Room, Reason..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{
@@ -489,7 +489,7 @@ export const LeavesManagementView: React.FC = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '13px' }}>
-                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Bank Code</th>
+                <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Student ID</th>
                 <th style={{ padding: '12px 14px', whiteSpace: 'nowrap', minWidth: '180px' }}>Student Name</th>
                 <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Floor / Room</th>
                 <th style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>Leave Duration</th>
