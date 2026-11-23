@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Download, 
-  BarChart3, 
-  Users, 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle, 
-  Eye, 
-  MessageSquare, 
-  Search, 
-  RotateCw, 
-  Vote, 
-  ClipboardList, 
+import {
+  ArrowLeft,
+  Download,
+  BarChart3,
+  Users,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Eye,
+  MessageSquare,
+  Search,
+  RotateCw,
+  Vote,
+  ClipboardList,
   ChevronRight,
   Filter,
   Check,
@@ -117,7 +117,7 @@ export const FormAnalyticsDetailView: React.FC = () => {
   // Filtered lists for responses, seen, and pending
   const filteredResponses = (analyticsData?.responses || []).filter((r: any) => {
     const q = searchQuery.toLowerCase();
-    const matchesSearch = !q || 
+    const matchesSearch = !q ||
       (r.student_name || '').toLowerCase().includes(q) ||
       (r.student_code || '').toLowerCase().includes(q) ||
       String(r.room_number || '').toLowerCase().includes(q);
@@ -127,7 +127,7 @@ export const FormAnalyticsDetailView: React.FC = () => {
 
   const filteredSeenNotAnswered = (analyticsData?.seen_not_answered || []).filter((s: any) => {
     const q = searchQuery.toLowerCase();
-    const matchesSearch = !q || 
+    const matchesSearch = !q ||
       (s.student_name || '').toLowerCase().includes(q) ||
       (s.student_code || '').toLowerCase().includes(q) ||
       String(s.room_number || '').toLowerCase().includes(q);
@@ -137,7 +137,7 @@ export const FormAnalyticsDetailView: React.FC = () => {
 
   const filteredNotResponded = (analyticsData?.not_responded || []).filter((s: any) => {
     const q = searchQuery.toLowerCase();
-    const matchesSearch = !q || 
+    const matchesSearch = !q ||
       (s.student_name || '').toLowerCase().includes(q) ||
       (s.student_code || '').toLowerCase().includes(q) ||
       String(s.room_number || '').toLowerCase().includes(q);
@@ -188,14 +188,14 @@ export const FormAnalyticsDetailView: React.FC = () => {
 
   return (
     <div className="analytics-detail-page">
-      
+
       {/* Top Header & Navigation */}
       <div className="report-header-banner">
         <div className="report-nav-left">
           <button className="back-btn" onClick={() => navigate('/forms')}>
             <ArrowLeft size={16} /> Back to Forms
           </button>
-          
+
           <div className="report-title-group">
             <div className="report-badge-row">
               <span className={`form-type-tag ${isPoll ? 'poll' : 'form'}`}>
@@ -288,25 +288,25 @@ export const FormAnalyticsDetailView: React.FC = () => {
       {/* Navigation Tabs */}
       <div className="report-tabs-bar">
         <div className="report-tabs-group">
-          <button 
+          <button
             className={`report-tab-pill ${activeTab === 'charts' ? 'active' : ''}`}
             onClick={() => setActiveTab('charts')}
           >
             📊 Visual Results & Poll Breakdown
           </button>
-          <button 
+          <button
             className={`report-tab-pill ${activeTab === 'responses' ? 'active' : ''}`}
             onClick={() => setActiveTab('responses')}
           >
             📝 All Student Responses ({analyticsData.responses.length})
           </button>
-          <button 
+          <button
             className={`report-tab-pill ${activeTab === 'seen' ? 'active' : ''}`}
             onClick={() => setActiveTab('seen')}
           >
             👀 Seen But Not Answered ({analyticsData.seen_not_answered.length})
           </button>
-          <button 
+          <button
             className={`report-tab-pill ${activeTab === 'pending' ? 'active' : ''}`}
             onClick={() => setActiveTab('pending')}
           >
@@ -318,9 +318,9 @@ export const FormAnalyticsDetailView: React.FC = () => {
           <div className="report-table-filters">
             <div className="report-search-box">
               <Search size={15} color="#94a3b8" />
-              <input 
-                type="text" 
-                placeholder="Search student, code, room..." 
+              <input
+                type="text"
+                placeholder="Search student, code, room..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -332,7 +332,7 @@ export const FormAnalyticsDetailView: React.FC = () => {
             </div>
 
             {availableFloors.length > 0 && (
-              <select 
+              <select
                 className="report-floor-select"
                 value={floorFilter}
                 onChange={e => setFloorFilter(e.target.value)}
@@ -375,9 +375,9 @@ export const FormAnalyticsDetailView: React.FC = () => {
                           <span className="option-votes">{optItem.count} votes ({optItem.percentage}%)</span>
                         </div>
                         <div className="option-progress-track">
-                          <div 
-                            className="option-progress-fill" 
-                            style={{ 
+                          <div
+                            className="option-progress-fill"
+                            style={{
                               width: `${optItem.percentage}%`,
                               backgroundColor: idx % 4 === 0 ? '#2A9D8F' : idx % 4 === 1 ? '#7B73D1' : idx % 4 === 2 ? '#E09F3E' : '#4361EE'
                             }}
@@ -488,7 +488,7 @@ export const FormAnalyticsDetailView: React.FC = () => {
                       <td>{new Date(s.first_viewed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                       <td>{new Date(s.last_viewed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                       <td style={{ textAlign: 'right' }}>
-                        <button 
+                        <button
                           className="whatsapp-btn"
                           onClick={() => sendWhatsAppReminder(s.phone, s.student_name)}
                         >
@@ -549,7 +549,7 @@ export const FormAnalyticsDetailView: React.FC = () => {
                         )}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <button 
+                        <button
                           className="whatsapp-btn"
                           onClick={() => sendWhatsAppReminder(s.phone, s.student_name)}
                         >

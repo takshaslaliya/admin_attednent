@@ -1890,9 +1890,9 @@ export const AttendanceReportsView: React.FC = () => {
                         key={`cell-${index}`}
                         fill={
                           entry.name === 'On-Time' ? '#2A9D8F' :
-                          entry.name === 'Late' ? '#E09F3E' :
-                          entry.name === 'Absent' ? '#E76F51' :
-                          '#7B73D1'
+                            entry.name === 'Late' ? '#E09F3E' :
+                              entry.name === 'Absent' ? '#E76F51' :
+                                '#7B73D1'
                         }
                       />
                     ))}

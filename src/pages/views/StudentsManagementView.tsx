@@ -329,14 +329,6 @@ export const StudentsManagementView: React.FC = () => {
     if (!studentTagModal) return;
     const studentId = studentTagModal.student.student_id || studentTagModal.student.id;
 
-    if (studentTagModal.studentTags.length >= 3) {
-      setStudentTagModal({
-        ...studentTagModal,
-        error: 'Maximum 3 manual tags can be assigned per student.'
-      });
-      return;
-    }
-
     try {
       const res = await apiClient.post(`/tags/student/${studentId}`, { tag_id: tag.id });
       if (res.data.success) {
@@ -1303,7 +1295,7 @@ export const StudentsManagementView: React.FC = () => {
                       gap: '4px'
                     }}
                   >
-                    <Tag size={13} /> Tags ({(student.tags || []).length}/3)
+                    <Tag size={13} /> Tags ({(student.tags || []).length})
                   </button>
 
                   {userRole !== 'LEADER' && (
@@ -1462,7 +1454,7 @@ export const StudentsManagementView: React.FC = () => {
             <div style={{ marginBottom: '18px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
-                  Assigned Tags ({studentTagModal.studentTags.length} / 3 Maximum):
+                  Assigned Tags ({studentTagModal.studentTags.length}):
                 </label>
                 <span style={{ fontSize: '11px', color: '#64748b' }}>Visible to Admin & Leader only</span>
               </div>
@@ -1511,13 +1503,12 @@ export const StudentsManagementView: React.FC = () => {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '140px', overflowY: 'auto', padding: '4px' }}>
                 {allTags.map(tag => {
                   const alreadyHas = studentTagModal.studentTags.some(t => (t.id || t.tag_id) === tag.id);
-                  const isLimitReached = studentTagModal.studentTags.length >= 3;
 
                   return (
                     <button
                       key={tag.id}
                       type="button"
-                      disabled={alreadyHas || isLimitReached}
+                      disabled={alreadyHas}
                       onClick={() => handleAssignTagToStudent(tag)}
                       style={{
                         padding: '6px 12px',
@@ -1527,7 +1518,7 @@ export const StudentsManagementView: React.FC = () => {
                         backgroundColor: alreadyHas ? '#f1f5f9' : `${tag.color}15`,
                         color: alreadyHas ? '#94a3b8' : tag.color,
                         border: `1px solid ${alreadyHas ? '#e2e8f0' : `${tag.color}40`}`,
-                        cursor: (alreadyHas || isLimitReached) ? 'not-allowed' : 'pointer',
+                        cursor: alreadyHas ? 'not-allowed' : 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '5px'
