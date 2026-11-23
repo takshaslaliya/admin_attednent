@@ -322,13 +322,24 @@ export const DashboardOverview: React.FC = () => {
   const currentSessionName = stats?.current_session?.name || 'Recent Attendance';
   const isRecent = stats?.current_session?.is_recent;
 
+  // Compute dynamic chart title based on session scheduled days
+  const distinctDays = Array.from(new Set((stats?.weekly_stats || []).map((s: any) => s.day_name).filter(Boolean)));
+  let chartScheduleLabel = 'Last 7 Days';
+  if (distinctDays.length === 1) {
+    chartScheduleLabel = `Last 7 ${distinctDays[0]}s`;
+  } else if (distinctDays.length > 1 && distinctDays.length < 7) {
+    chartScheduleLabel = `${distinctDays.join(' & ')} Sessions`;
+  }
+
   const chartData = (stats?.weekly_stats || []).map((s: any) => {
     const presentCount = s.present || 0;
     const lateCount = s.late || 0;
     const leaveCount = s.leave || 0;
     const absentCount = s.absent !== undefined ? s.absent : (presentCount > 0 ? Math.max(0, (stats?.total_students || 0) - presentCount - leaveCount) : 0);
+    const dateFormatted = new Date(s.date + 'T12:00:00+05:30').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const label = s.day_name ? `${dateFormatted} (${s.day_name})` : dateFormatted;
     return {
-      name: new Date(s.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      name: label,
       present: presentCount,
       late: lateCount,
       leave: leaveCount,
@@ -763,7 +774,7 @@ export const DashboardOverview: React.FC = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                Attendance Overview (Last 7 Days)
+                Attendance Overview ({chartScheduleLabel})
               </h3>
               <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0 0' }}>
                 Real-time records for <strong>{currentSessionName}</strong>
