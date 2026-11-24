@@ -173,6 +173,9 @@ export const BlockedAccountsView: React.FC = () => {
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 15 }}>
                 {who(b.student)}{b.student.room_number ? ` · Room ${b.student.room_number}` : ''}
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: '#f1f5f9', color: '#334155' }}>
+                  {b.source === 'multi_login' ? 'Multi-login (same phone)' : b.source === 'token_tamper' ? 'Edited token' : 'Blocked by admin'}
+                </span>
               </div>
               <div style={{ fontSize: 13, color: '#334155', margin: '6px 0' }}><strong>Reason:</strong> {b.reason}</div>
               <div style={{ fontSize: 12, color: '#64748b' }}>
