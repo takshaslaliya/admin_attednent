@@ -21,6 +21,7 @@ import { SessionViewerCredentialsView } from './views/SessionViewerCredentialsVi
 import { FormsManagementView } from './views/FormsManagementView';
 import { FormAnalyticsDetailView } from './views/FormAnalyticsDetailView';
 import { RecycleBinView } from './views/RecycleBinView';
+import { BlockedAccountsView } from './views/BlockedAccountsView';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -167,6 +168,7 @@ export const AdminLayout: React.FC = () => {
             <Route path="/data-recovery" element={!isLeader ? <RecycleBinView /> : <Navigate to="/" replace />} />
             <Route path="/leaves" element={<LeavesManagementView />} />
             <Route path="/security" element={<DeviceSecurityView />} />
+            <Route path="/blocked-accounts" element={!isLeader ? <BlockedAccountsView /> : <Navigate to="/" replace />} />
             <Route path="/sessions" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
             <Route path="/session-management" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />
             <Route path="/manage-sessions" element={!isLeader ? <SessionsManagementView /> : <Navigate to="/" replace />} />

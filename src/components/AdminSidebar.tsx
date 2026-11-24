@@ -111,7 +111,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
   const isStrings = pathname === '/strings' || pathname === '/floor-strings' || pathname === '/generate-string';
   const isSecurity = pathname === '/security';
-  const isSecurityActive = isStrings || isSecurity;
+  const isBlockedAccounts = pathname === '/blocked-accounts';
+  const isSecurityActive = isStrings || isSecurity || isBlockedAccounts;
 
   const isAddSession = pathname === '/session_add' || pathname === '/add_session';
   const isSessionsActive = pathname.startsWith('/session/') || isAddSession || pathname === '/sessions' || pathname === '/session-management';
@@ -375,6 +376,17 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                       <span className="subitem-bullet"></span>
                       <ShieldAlert size={15} className="subitem-icon" style={{ color: '#ef4444' }} />
                       <span>Proxy & IP Security</span>
+                    </button>
+                  )}
+
+                  {!isLeader && (
+                    <button
+                      className={`nav-subitem-btn ${isBlockedAccounts ? 'active' : ''}`}
+                      onClick={() => handleNavClick('/blocked-accounts')}
+                    >
+                      <span className="subitem-bullet"></span>
+                      <ShieldAlert size={15} className="subitem-icon" style={{ color: '#b91c1c' }} />
+                      <span>Blocked Accounts</span>
                     </button>
                   )}
                 </div>
