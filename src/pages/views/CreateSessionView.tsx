@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Moon, Sun, Users, Code, Book, Coffee, Activity, Calendar, Bell, Flame, Sparkles, Smartphone, PlusCircle, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { HamsCard } from '../../components/HamsCard';
+import { OutOfRangeMessageFields } from '../../components/OutOfRangeMessageFields';
 
 const ICONS = [
   { name: 'moon', icon: Moon, label: 'Night' },
@@ -32,6 +33,9 @@ export const CreateSessionView: React.FC<{ onAdded?: () => void }> = ({ onAdded 
   const [win2StartTime, setWin2StartTime] = useState('07:25');
   const [win2EndTime, setWin2EndTime] = useState('07:30');
   const [win2LateTime, setWin2LateTime] = useState('07:28');
+
+  const [outOfRangeMessage, setOutOfRangeMessage] = useState('');
+  const [outOfRangeMessage2, setOutOfRangeMessage2] = useState('');
 
   const [loading, setLoading] = useState(false);
 
@@ -68,7 +72,9 @@ export const CreateSessionView: React.FC<{ onAdded?: () => void }> = ({ onAdded 
         session_name: sessionName.trim(),
         icon_name: selectedIcon,
         is_for_all_students: isForAllStudents,
-        has_multiple_attendance: enableMultipleAttendance
+        has_multiple_attendance: enableMultipleAttendance,
+        out_of_range_message: outOfRangeMessage.trim() || null,
+        out_of_range_message_phase2: enableMultipleAttendance ? (outOfRangeMessage2.trim() || null) : null
       };
 
       if (enableMultipleAttendance) {
@@ -87,6 +93,8 @@ export const CreateSessionView: React.FC<{ onAdded?: () => void }> = ({ onAdded 
         setSessionName('');
         setIsForAllStudents(true);
         setEnableMultipleAttendance(false);
+        setOutOfRangeMessage('');
+        setOutOfRangeMessage2('');
         if (onAdded) onAdded();
       }
     } catch (err: any) {
@@ -357,6 +365,14 @@ export const CreateSessionView: React.FC<{ onAdded?: () => void }> = ({ onAdded 
               </div>
             )}
           </div>
+
+          <OutOfRangeMessageFields
+            twoPhase={enableMultipleAttendance}
+            message={outOfRangeMessage}
+            onMessageChange={setOutOfRangeMessage}
+            messagePhase2={outOfRangeMessage2}
+            onMessagePhase2Change={setOutOfRangeMessage2}
+          />
 
           <button
             type="submit"

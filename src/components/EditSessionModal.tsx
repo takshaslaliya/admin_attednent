@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { OutOfRangeMessageFields } from './OutOfRangeMessageFields';
 import {
   X,
   Moon,
@@ -82,6 +83,9 @@ export const EditSessionModal: React.FC<EditSessionModalProps> = ({
     session.phase2_late_time ? String(session.phase2_late_time).slice(0, 5) : '07:28'
   );
 
+  const [outOfRangeMessage, setOutOfRangeMessage] = useState<string>(session.out_of_range_message || '');
+  const [outOfRangeMessage2, setOutOfRangeMessage2] = useState<string>(session.out_of_range_message_phase2 || '');
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -98,6 +102,8 @@ export const EditSessionModal: React.FC<EditSessionModalProps> = ({
       setWin2StartTime(session.phase2_start_time ? String(session.phase2_start_time).slice(0, 5) : '07:25');
       setWin2EndTime(session.phase2_end_time ? String(session.phase2_end_time).slice(0, 5) : '07:30');
       setWin2LateTime(session.phase2_late_time ? String(session.phase2_late_time).slice(0, 5) : '');
+      setOutOfRangeMessage(session.out_of_range_message || '');
+      setOutOfRangeMessage2(session.out_of_range_message_phase2 || '');
       setErrorMsg('');
     }
   }, [session]);
@@ -153,7 +159,10 @@ export const EditSessionModal: React.FC<EditSessionModalProps> = ({
         late_time: win1LateTime || null,
         phase2_start_time: enableMultipleAttendance ? win2StartTime : null,
         phase2_end_time: enableMultipleAttendance ? win2EndTime : null,
-        phase2_late_time: enableMultipleAttendance ? (win2LateTime || null) : null
+        phase2_late_time: enableMultipleAttendance ? (win2LateTime || null) : null,
+        // "" clears a message (students then see the default text).
+        out_of_range_message: outOfRangeMessage.trim(),
+        out_of_range_message_phase2: outOfRangeMessage2.trim()
       };
 
       const res = await apiClient.put(`/admin/sessions/${session.session_key}`, payload);
@@ -661,6 +670,14 @@ export const EditSessionModal: React.FC<EditSessionModalProps> = ({
               </div>
             </div>
           )}
+
+          <OutOfRangeMessageFields
+            twoPhase={enableMultipleAttendance}
+            message={outOfRangeMessage}
+            onMessageChange={setOutOfRangeMessage}
+            messagePhase2={outOfRangeMessage2}
+            onMessagePhase2Change={setOutOfRangeMessage2}
+          />
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
