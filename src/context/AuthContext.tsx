@@ -11,10 +11,19 @@ interface AdminUser {
   session_permissions?: Record<string, 'view' | 'edit'>;
 }
 
+/**
+ * Result of a login attempt. Admin logins need a WhatsApp code: the first request (ID only)
+ * answers 428 `requires_code`, which is a step, not a failure.
+ */
+export type LoginResult =
+  | { ok: true }
+  | { ok: false; needsCode: true; message: string; status: number };
+
 interface AuthContextType {
   admin: AdminUser | null;
   token: string | null;
-  login: (code: string, password?: string) => Promise<boolean>;
+  /** Admin portal: ID, then ID + `code`. Mentor portal: ID + `password` (unchanged). */
+  login: (username: string, password?: string, code?: string) => Promise<LoginResult>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   loading: boolean;
@@ -80,10 +89,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, [token]);
 
-  const login = async (code: string, password?: string): Promise<boolean> => {
+  const login = async (username: string, password?: string, code?: string): Promise<LoginResult> => {
     try {
-      const payload: any = { username: code.trim() };
-      if (password) payload.password = password;
+      // Never send a 6-digit `password` for an admin (the server reads it as a code) and never
+      // send `client` (that is the mobile app's field).
+      const payload: Record<string, string> = { username: username.trim() };
+      if (code) payload.code = code.trim();
+      else if (password) payload.password = password; // mentor login only
 
       const res = await apiClient.post('/auth/login', payload);
       if (res.data.success) {
@@ -98,20 +110,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             assigned_sessions: res.data.data.assigned_sessions || res.data.data.user?.assigned_sessions || ['all'],
             session_permissions: res.data.data.session_permissions || res.data.data.user?.session_permissions || {},
           };
-          const tok = res.data.data.token;
+          const tok = res.data.data.token || res.data.token;
+          // No session in the browser without a token issued by the server.
+          if (!tok) throw new Error('Login failed: the server did not issue a session. Please try again.');
           setToken(tok);
           setAdmin(userObj);
           localStorage.setItem('admin_token', tok);
           localStorage.setItem('admin_user', JSON.stringify(userObj));
-          return true;
+          return { ok: true };
         } else {
           throw new Error('This portal is for Administrators & Floor Leaders only. Students must use the Student Portal (port 5173).');
         }
       }
       throw new Error(res.data.message || 'Access restricted to Administrators');
     } catch (err: any) {
+      const status = err.response?.status;
+      const data = err.response?.data;
+      // 428 = a code is needed (sent, already sent, could not be sent, or the one given was wrong).
+      // It is a step of the admin login, so check it before turning errors into messages.
+      if (status === 428 && data?.requires_code) {
+        const message = String(data.message || '').replace(' Type it in the password box.', '');
+        return { ok: false, needsCode: true, message, status };
+      }
       console.error('Login error:', err);
-      throw new Error(err.response?.data?.message || err.message || 'Login failed');
+      throw new Error(data?.message || err.message || 'Login failed');
     }
   };
 
@@ -123,7 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ admin, token, login, logout, loading }}>
+    <AuthContext.Provider value={{ admin, token, login, logout, refreshUser, loading }}>
       {children}
     </AuthContext.Provider>
   );
